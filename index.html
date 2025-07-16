@@ -7,7 +7,7 @@
     canvas { display: block; margin: auto; }
     body { background: #111; color: #eee; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
     .controls { margin: 20px 0; }
-    .play-btn {
+    .play-btn, .control-btn {
       background: #4CAF50;
       border: none;
       color: white;
@@ -21,8 +21,26 @@
       border-radius: 8px;
       transition: background-color 0.3s;
     }
+    .control-btn {
+      background: #2196F3;
+      padding: 10px 20px;
+      font-size: 14px;
+    }
     .play-btn:hover { background: #45a049; }
+    .control-btn:hover { background: #1976D2; }
     .play-btn:disabled { background: #666; cursor: not-allowed; }
+    .camera-info {
+      margin: 10px 0;
+      font-size: 14px;
+    }
+    .camera-info span {
+      margin: 0 10px;
+    }
+    .controls-hint {
+      color: #aaa;
+      font-size: 12px;
+      font-style: italic;
+    }
     .legend {
       display: inline-block;
       margin: 10px;
@@ -39,13 +57,23 @@
       margin-right: 10px;
       border: 1px solid #fff;
     }
+    canvas {
+      border: 2px solid #333;
+      border-radius: 8px;
+    }
   </style>
 </head>
 <body>
   <h1>🏰 Dungeon Rescue</h1>
   <p id="minHp"></p>
+  <p id="dungeonSize"></p>
   <div class="controls">
     <button id="playBtn" class="play-btn">▶️ Start Rescue Mission</button>
+    <button id="resetCameraBtn" class="control-btn" onclick="resetCamera()">🎯 Reset View</button>
+  </div>
+  <div class="camera-info">
+    <span id="zoomLevel">Zoom: 100%</span>
+    <span class="controls-hint">Use mouse wheel to zoom, drag to pan, or use WASD/arrow keys. Press R to reset view.</span>
   </div>
   <div class="legend">
     <div class="legend-item">
