@@ -5,6 +5,10 @@ const cellSize = 50;
 let scene, camera, renderer;
 let knight, princess;
 let isAnimating = false;
+let zoomLevel = 1;
+let cameraPosition = { x: 0, y: 0 };
+let isDragging = false;
+let lastMousePosition = { x: 0, y: 0 };
 
 init();
 
@@ -12,9 +16,18 @@ function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
 
+  // Calculate dungeon dimensions for proper camera setup
+  const dungeonWidth = dungeonData.input[0].length * cellSize;
+  const dungeonHeight = dungeonData.input.length * cellSize;
+  const maxDimension = Math.max(dungeonWidth, dungeonHeight);
+  
+  // Set up orthographic camera with proper bounds
+  const aspect = window.innerWidth / window.innerHeight;
+  const cameraSize = maxDimension * 0.8; // Add some padding
+  
   camera = new THREE.OrthographicCamera(
-    window.innerWidth / -2, window.innerWidth / 2,
-    window.innerHeight / 2, window.innerHeight / -2,
+    -cameraSize * aspect / 2, cameraSize * aspect / 2,
+    cameraSize / 2, -cameraSize / 2,
     0.1, 1000
   );
   camera.position.z = 500;
@@ -24,14 +37,16 @@ function init() {
   document.body.appendChild(renderer.domElement);
 
   document.getElementById('minHp').textContent = `Minimum HP Required: ${dungeonData.min_hp}`;
+  document.getElementById('dungeonSize').textContent = `Dungeon Size: ${dungeonData.input.length} x ${dungeonData.input[0].length}`;
 
   createDungeon(dungeonData.input);
   createGridLines(dungeonData.input);
   createPrincess(dungeonData.input);
   createKnight();
   
-  // Add play button event listener
+  // Add event listeners
   document.getElementById('playBtn').addEventListener('click', startAnimation);
+  setupCameraControls();
   
   animate();
 }
@@ -187,3 +202,208 @@ function animate() {
   requestAnimationFrame(animate);
   renderer.render(scene, camera);
 }
+
+function setupCameraControls() {
+  // Mouse wheel for zooming
+  renderer.domElement.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    const zoomSpeed = 0.1;
+    const oldZoom = zoomLevel;
+    
+    if (event.deltaY > 0) {
+      zoomLevel = Math.min(zoomLevel * (1 + zoomSpeed), 5); // Max zoom out
+    } else {
+      zoomLevel = Math.max(zoomLevel * (1 - zoomSpeed), 0.1); // Max zoom in
+    }
+    
+    updateCameraZoom();
+  });
+
+  // Mouse controls for panning
+  renderer.domElement.addEventListener('mousedown', (event) => {
+    isDragging = true;
+    lastMousePosition.x = event.clientX;
+    lastMousePosition.y = event.clientY;
+    renderer.domElement.style.cursor = 'grabbing';
+  });
+
+  renderer.domElement.addEventListener('mousemove', (event) => {
+    if (isDragging) {
+      const deltaX = event.clientX - lastMousePosition.x;
+      const deltaY = event.clientY - lastMousePosition.y;
+      
+      const panSpeed = 2 * zoomLevel;
+      cameraPosition.x -= deltaX * panSpeed;
+      cameraPosition.y += deltaY * panSpeed;
+      
+      updateCameraPosition();
+      
+      lastMousePosition.x = event.clientX;
+      lastMousePosition.y = event.clientY;
+    }
+  });
+
+  renderer.domElement.addEventListener('mouseup', () => {
+    isDragging = false;
+    renderer.domElement.style.cursor = 'grab';
+  });
+
+  renderer.domElement.addEventListener('mouseleave', () => {
+    isDragging = false;
+    renderer.domElement.style.cursor = 'default';
+  });
+
+  // Touch controls for mobile
+  let touchStartDistance = 0;
+  let touchStartZoom = 1;
+  
+  renderer.domElement.addEventListener('touchstart', (event) => {
+    if (event.touches.length === 2) {
+      const dx = event.touches[0].clientX - event.touches[1].clientX;
+      const dy = event.touches[0].clientY - event.touches[1].clientY;
+      touchStartDistance = Math.sqrt(dx * dx + dy * dy);
+      touchStartZoom = zoomLevel;
+    } else if (event.touches.length === 1) {
+      isDragging = true;
+      lastMousePosition.x = event.touches[0].clientX;
+      lastMousePosition.y = event.touches[0].clientY;
+    }
+  });
+
+  renderer.domElement.addEventListener('touchmove', (event) => {
+    event.preventDefault();
+    
+    if (event.touches.length === 2) {
+      const dx = event.touches[0].clientX - event.touches[1].clientX;
+      const dy = event.touches[0].clientY - event.touches[1].clientY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      zoomLevel = Math.max(0.1, Math.min(5, touchStartZoom * (distance / touchStartDistance)));
+      updateCameraZoom();
+    } else if (event.touches.length === 1 && isDragging) {
+      const deltaX = event.touches[0].clientX - lastMousePosition.x;
+      const deltaY = event.touches[0].clientY - lastMousePosition.y;
+      
+      const panSpeed = 2 * zoomLevel;
+      cameraPosition.x -= deltaX * panSpeed;
+      cameraPosition.y += deltaY * panSpeed;
+      
+      updateCameraPosition();
+      
+      lastMousePosition.x = event.touches[0].clientX;
+      lastMousePosition.y = event.touches[0].clientY;
+    }
+  });
+
+  renderer.domElement.addEventListener('touchend', () => {
+    isDragging = false;
+  });
+
+  // Keyboard controls
+  document.addEventListener('keydown', (event) => {
+    const panSpeed = 50 * zoomLevel;
+    
+    switch(event.key) {
+      case 'ArrowUp':
+      case 'w':
+      case 'W':
+        cameraPosition.y += panSpeed;
+        updateCameraPosition();
+        event.preventDefault();
+        break;
+      case 'ArrowDown':
+      case 's':
+      case 'S':
+        cameraPosition.y -= panSpeed;
+        updateCameraPosition();
+        event.preventDefault();
+        break;
+      case 'ArrowLeft':
+      case 'a':
+      case 'A':
+        cameraPosition.x += panSpeed;
+        updateCameraPosition();
+        event.preventDefault();
+        break;
+      case 'ArrowRight':
+      case 'd':
+      case 'D':
+        cameraPosition.x -= panSpeed;
+        updateCameraPosition();
+        event.preventDefault();
+        break;
+      case '+':
+      case '=':
+        zoomLevel = Math.max(zoomLevel * 0.9, 0.1);
+        updateCameraZoom();
+        event.preventDefault();
+        break;
+      case '-':
+      case '_':
+        zoomLevel = Math.min(zoomLevel * 1.1, 5);
+        updateCameraZoom();
+        event.preventDefault();
+        break;
+      case 'r':
+      case 'R':
+        resetCamera();
+        event.preventDefault();
+        break;
+    }
+  });
+
+  // Set initial cursor style
+  renderer.domElement.style.cursor = 'grab';
+}
+
+function updateCameraZoom() {
+  const dungeonWidth = dungeonData.input[0].length * cellSize;
+  const dungeonHeight = dungeonData.input.length * cellSize;
+  const maxDimension = Math.max(dungeonWidth, dungeonHeight);
+  const aspect = window.innerWidth / window.innerHeight;
+  const cameraSize = maxDimension * 0.8 * zoomLevel;
+  
+  camera.left = -cameraSize * aspect / 2;
+  camera.right = cameraSize * aspect / 2;
+  camera.top = cameraSize / 2;
+  camera.bottom = -cameraSize / 2;
+  camera.updateProjectionMatrix();
+  
+  // Update zoom display
+  document.getElementById('zoomLevel').textContent = `Zoom: ${(1/zoomLevel * 100).toFixed(0)}%`;
+}
+
+function updateCameraPosition() {
+  camera.position.x = cameraPosition.x;
+  camera.position.y = cameraPosition.y;
+}
+
+function resetCamera() {
+  zoomLevel = 1;
+  cameraPosition.x = 0;
+  cameraPosition.y = 0;
+  updateCameraZoom();
+  updateCameraPosition();
+}
+
+// Handle window resize
+function onWindowResize() {
+  const aspect = window.innerWidth / window.innerHeight;
+  const dungeonWidth = dungeonData.input[0].length * cellSize;
+  const dungeonHeight = dungeonData.input.length * cellSize;
+  const maxDimension = Math.max(dungeonWidth, dungeonHeight);
+  const cameraSize = maxDimension * 0.8 * zoomLevel;
+  
+  camera.left = -cameraSize * aspect / 2;
+  camera.right = cameraSize * aspect / 2;
+  camera.top = cameraSize / 2;
+  camera.bottom = -cameraSize / 2;
+  camera.updateProjectionMatrix();
+  
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+window.addEventListener('resize', onWindowResize);
+
+// Make resetCamera function global so it can be called from HTML
+window.resetCamera = resetCamera;
