@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Dungeon Rescue</title>
+  <style>
+    canvas { display: block; margin: auto; }
+    body { background: #111; color: #eee; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
+    .controls { margin: 20px 0; }
+    .play-btn {
+      background: #4CAF50;
+      border: none;
+      color: white;
+      padding: 15px 32px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin: 4px 2px;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: background-color 0.3s;
+    }
+    .play-btn:hover { background: #45a049; }
+    .play-btn:disabled { background: #666; cursor: not-allowed; }
+    .legend {
+      display: inline-block;
+      margin: 10px;
+      text-align: left;
+    }
+    .legend-item {
+      margin: 5px 0;
+      display: flex;
+      align-items: center;
+    }
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      margin-right: 10px;
+      border: 1px solid #fff;
+    }
+  </style>
+</head>
+<body>
+  <h1>🏰 Dungeon Rescue</h1>
+  <p id="minHp"></p>
+  <div class="controls">
+    <button id="playBtn" class="play-btn">▶️ Start Rescue Mission</button>
+  </div>
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-color" style="background: #444444;"></div>
+      <span>Neutral Room</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: #00ff00;"></div>
+      <span>Power-up Room</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: #ff0000;"></div>
+      <span>Threat Room</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: #00ffff;"></div>
+      <span>🛡️ Knight</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: #ff69b4;"></div>
+      <span>👸 Princess</span>
+    </div>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
