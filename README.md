@@ -4,7 +4,10 @@ A 3D interactive visualization of the classic **Dungeon Princess** problem, buil
 
 ## 🎮 Demo
 
-![Dungeon Rescue Demo](https://github.com/user-attachments/assets/e51a4f80-1e0f-430e-b4e0-27d86b3b7bdf)
+<video width="600" controls>
+  <source src="https://github.com/TiagoSD22/dungeon_crawler/blob/master/dungeon_crawler_demo.mp4?raw=true" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
 *Watch the knight navigate through the dungeon to rescue the princess!*
 
