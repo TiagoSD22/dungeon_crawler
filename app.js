@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import dungeonData from './dungeon.json';
 import { DirectionalSpriteKnight } from './DirectionalSpriteKnight.js';
+import { PowerUpManager } from './PowerUpManager.js';
 
 const cellSize = 50;
 let scene, camera, renderer;
 let knight, princess;
+let powerUpManager;
 let isAnimating = false;
 let zoomLevel = 1;
 let cameraPosition = { x: 0, y: 0 };
@@ -65,6 +67,10 @@ async function init() {
   createGridLines(dungeonData.input);
   createPrincess(dungeonData.input);
   
+  // Initialize power-up manager
+  powerUpManager = new PowerUpManager();
+  await createPowerUps(dungeonData.input);
+  
   // Show loading message
   document.getElementById('playBtn').textContent = '🔄 Loading Knight Animations...';
   document.getElementById('playBtn').disabled = true;
@@ -99,6 +105,21 @@ function createDungeon(grid) {
       scene.add(room);
     }
   }
+}
+
+async function createPowerUps(grid) {
+  console.log('🔮 Creating power-ups for power rooms...');
+  
+  for (let i = 0; i < grid.length; i++) {
+    for (let j = 0; j < grid[i].length; j++) {
+      const roomValue = grid[i][j];
+      if (roomValue > 0) {
+        await powerUpManager.createPowerUpForRoom(i, j, roomValue, cellSize, scene, grid[0].length, grid.length);
+      }
+    }
+  }
+  
+  console.log('✅ Power-ups created successfully!');
 }
 
 function createGridLines(grid) {
@@ -210,6 +231,14 @@ function startAnimation() {
   if (knight.characterController) {
     knight.characterController.resetToInitialState();
   }
+  
+  // Reset power-up manager
+  powerUpManager.clearInventory();
+  
+  // Reset power-ups (recreate them)
+  powerUpManager.dispose();
+  powerUpManager = new PowerUpManager();
+  createPowerUps(dungeonData.input);
   
   // Position knight outside the dungeon for entrance
   const path = dungeonData.path;
@@ -349,14 +378,30 @@ function animatePath() {
               }, 1000); // 1 second for attack animation
               
             } else {
-              // Power room - just idle
-              console.log('💪 Power room detected - resting');
-              knight.characterController.goIdle(direction);
+              // Power room - collect power-up and idle
+              console.log('💪 Power room detected - collecting power-up');
               
-              // Pause for 2 seconds in power room
-              setTimeout(() => {
-                moveKnight(); // Continue after pause
-              }, 2000);
+              // Collect power-up
+              const collectedPowerUp = powerUpManager.collectPowerUp(i, j);
+              
+              if (collectedPowerUp) {
+                // Celebration animation
+                knight.characterController.celebratePowerUp(direction);
+                
+                // Pause for celebration then continue
+                setTimeout(() => {
+                  knight.characterController.goIdle(direction);
+                  setTimeout(() => {
+                    moveKnight(); // Continue after pause
+                  }, 1500);
+                }, 800);
+              } else {
+                // No power-up to collect, just idle
+                knight.characterController.goIdle(direction);
+                setTimeout(() => {
+                  moveKnight(); // Continue after pause
+                }, 2000);
+              }
             }
           } else {
             // Normal pause between moves (corridor movement)
@@ -397,6 +442,11 @@ function animate() {
       // For sprite-based characters
       knight.characterController.update(0.016);
     }
+  }
+  
+  // Update power-ups
+  if (powerUpManager) {
+    powerUpManager.updateAllPowerUps(0.016);
   }
   
   renderer.render(scene, camera);

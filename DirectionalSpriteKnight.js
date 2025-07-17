@@ -288,6 +288,20 @@ export class DirectionalSpriteKnight {
     }, 2000);
   }
 
+  // Power-up collection celebration
+  celebratePowerUp(direction = null) {
+    console.log('🎉 Knight celebrating power-up collection!');
+    
+    // Quick idle animation burst
+    const originalSpeed = this.animationSpeed;
+    this.playAnimation('idle', direction);
+    this.animationSpeed = 0.03; // Very fast animation
+    
+    setTimeout(() => {
+      this.animationSpeed = originalSpeed;
+    }, 800); // Short celebration
+  }
+
   getObject3D() {
     return this.sprite;
   }
