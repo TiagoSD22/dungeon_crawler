@@ -2,11 +2,13 @@ import * as THREE from 'three';
 import dungeonData from './dungeon.json';
 import { DirectionalSpriteKnight } from './DirectionalSpriteKnight.js';
 import { PowerUpManager } from './PowerUpManager.js';
+import { SpellEffectManager } from './SpellEffectManager.js';
 
 const cellSize = 50;
 let scene, camera, renderer;
 let knight, princess;
 let powerUpManager;
+let spellEffectManager;
 let isAnimating = false;
 let zoomLevel = 1;
 let cameraPosition = { x: 0, y: 0 };
@@ -77,6 +79,17 @@ async function init() {
   
   // Wait for Knight animations to load before enabling play button
   await createKnight();
+  
+  // Initialize spell effect manager
+  spellEffectManager = new SpellEffectManager();
+  await spellEffectManager.initialize(scene, cellSize);
+  
+  // Connect knight with spell effect manager
+  knight.characterController.setSpellEffectManager(spellEffectManager);
+  
+  // Sync knight's power-up with power-up manager
+  const currentPowerUp = powerUpManager.getCurrentPowerUp();
+  knight.characterController.setCurrentPowerUp(currentPowerUp);
   
   // Enable play button once Knight animations are loaded
   document.getElementById('playBtn').textContent = '▶️ Start Rescue';
@@ -240,6 +253,11 @@ function startAnimation() {
   powerUpManager = new PowerUpManager();
   createPowerUps(dungeonData.input);
   
+  // Reset knight's power-up
+  if (knight.characterController) {
+    knight.characterController.setCurrentPowerUp(null);
+  }
+  
   // Position knight outside the dungeon for entrance
   const path = dungeonData.path;
   const [startI, startJ] = path[0];
@@ -385,6 +403,9 @@ function animatePath() {
               const collectedPowerUp = powerUpManager.collectPowerUp(i, j);
               
               if (collectedPowerUp) {
+                // Update knight's current power-up
+                knight.characterController.setCurrentPowerUp(collectedPowerUp);
+                
                 // Celebration animation
                 knight.characterController.celebratePowerUp(direction);
                 
@@ -447,6 +468,11 @@ function animate() {
   // Update power-ups
   if (powerUpManager) {
     powerUpManager.updateAllPowerUps(0.016);
+  }
+  
+  // Update spell effects
+  if (spellEffectManager) {
+    spellEffectManager.updateAll(0.016);
   }
   
   renderer.render(scene, camera);

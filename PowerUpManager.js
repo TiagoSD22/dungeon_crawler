@@ -14,8 +14,15 @@ export class PowerUp {
     this.pulseSpeed = 0.003;
     this.baseScale = cellSize * 0.4;
     this.initialY = 0;
+    this.isLoaded = false;
     
-    this.loadTexture();
+    // Load texture immediately
+    this.loadTexture().then(() => {
+      this.isLoaded = true;
+      console.log(`✅ Power-up ${this.type} ready for animation`);
+    }).catch((error) => {
+      console.error(`❌ Failed to initialize power-up ${this.type}:`, error);
+    });
   }
 
   async loadTexture() {
@@ -40,6 +47,9 @@ export class PowerUp {
           this.sprite = new THREE.Sprite(this.material);
           this.sprite.scale.set(this.baseScale, this.baseScale, 1);
           
+          // Ensure sprite is visible and ready for animation
+          this.sprite.visible = true;
+          
           console.log(`🔮 Power-up ${this.type} loaded successfully`);
           resolve();
         },
@@ -60,28 +70,37 @@ export class PowerUp {
   }
 
   update(deltaTime) {
-    if (!this.sprite || this.isCollected) return;
+    if (!this.sprite || !this.sprite.visible || !this.isLoaded) {
+      // Debug: log why animation isn't running
+      if (Math.random() < 0.001) { // Very occasional debug
+        console.log(`🔍 ${this.type} not animating: sprite=${!!this.sprite}, visible=${this.sprite?.visible}, loaded=${this.isLoaded}`);
+      }
+      return;
+    }
     
     this.animationTime += deltaTime;
     
-    // Floating animation
-    const floatOffset = Math.sin(this.animationTime * this.floatSpeed * 1000) * this.floatHeight;
-    this.sprite.position.y = this.initialY + floatOffset;
-    
-    // Rotation animation
-    this.sprite.rotation.z += this.rotationSpeed;
-    
-    // Pulse scaling animation
-    const pulseScale = 1 + Math.sin(this.animationTime * this.pulseSpeed * 1000) * 0.1;
-    this.sprite.scale.set(
-      this.baseScale * pulseScale,
-      this.baseScale * pulseScale,
-      1
-    );
-    
-    // Gentle glow effect through opacity
-    const glowAlpha = 0.8 + Math.sin(this.animationTime * this.pulseSpeed * 1000 * 2) * 0.2;
-    this.material.opacity = glowAlpha;
+    // Only animate if not collected
+    if (!this.isCollected) {
+      // Floating animation
+      const floatOffset = Math.sin(this.animationTime * this.floatSpeed * 1000) * this.floatHeight;
+      this.sprite.position.y = this.initialY + floatOffset;
+      
+      // Rotation animation
+      this.sprite.rotation.z += this.rotationSpeed;
+      
+      // Pulse scaling animation
+      const pulseScale = 1 + Math.sin(this.animationTime * this.pulseSpeed * 1000) * 0.1;
+      this.sprite.scale.set(
+        this.baseScale * pulseScale,
+        this.baseScale * pulseScale,
+        1
+      );
+      
+      // Gentle glow effect through opacity
+      const glowAlpha = 0.8 + Math.sin(this.animationTime * this.pulseSpeed * 1000 * 2) * 0.2;
+      this.material.opacity = glowAlpha;
+    }
   }
 
   collect() {
@@ -143,6 +162,7 @@ export class PowerUp {
     }
     if (this.sprite) {
       this.sprite.visible = false;
+      // Note: The parent (scene) should remove this sprite
     }
   }
 }
@@ -155,13 +175,17 @@ export class PowerUpManager {
       'light', 'spikes', 'tesla_ball', 'tornado', 'water'
     ];
     this.currentInventory = null; // Currently held power-up
+    console.log('💎 PowerUpManager initialized');
   }
 
   async createPowerUpForRoom(i, j, roomValue, cellSize, scene, gridWidth, gridHeight) {
     if (roomValue <= 0) return; // Only create power-ups for positive room values
     
     const positionKey = `${i},${j}`;
-    if (this.powerUps.has(positionKey)) return; // Already has power-up
+    if (this.powerUps.has(positionKey)) {
+      console.log(`⚠️ Power-up already exists at position [${i},${j}] - skipping`);
+      return; // Already has power-up
+    }
     
     // Choose random power-up type
     const randomType = this.availableTypes[Math.floor(Math.random() * this.availableTypes.length)];
@@ -178,13 +202,19 @@ export class PowerUpManager {
       
       powerUp.setPosition(x, y, z);
       
+      // Verify sprite is ready
+      if (!powerUp.getObject3D()) {
+        console.error(`❌ Power-up ${randomType} sprite not ready at position [${i},${j}]`);
+        return;
+      }
+      
       // Add to scene
       scene.add(powerUp.getObject3D());
       
       // Store in manager
       this.powerUps.set(positionKey, powerUp);
       
-      console.log(`🔮 Created ${randomType} power-up at position [${i},${j}]`);
+      console.log(`🔮 Created ${randomType} power-up at position [${i},${j}] (${positionKey}) - sprite visible: ${powerUp.sprite.visible}`);
       
     } catch (error) {
       console.error(`Failed to create power-up for room [${i},${j}]:`, error);
@@ -232,6 +262,7 @@ export class PowerUpManager {
 
   updateAllPowerUps(deltaTime) {
     for (const powerUp of this.powerUps.values()) {
+      // Always try to update - let the individual power-up handle its own state
       powerUp.update(deltaTime);
     }
   }
@@ -241,10 +272,25 @@ export class PowerUpManager {
     this.updateInventoryUI();
   }
 
+  getCurrentPowerUp() {
+    return this.currentInventory;
+  }
+
   dispose() {
     for (const powerUp of this.powerUps.values()) {
       powerUp.dispose();
     }
     this.powerUps.clear();
+  }
+
+  // Remove all power-ups from scene
+  removeFromScene(scene) {
+    console.log(`🧹 Removing ${this.powerUps.size} power-ups from scene`);
+    for (const powerUp of this.powerUps.values()) {
+      if (powerUp.getObject3D()) {
+        scene.remove(powerUp.getObject3D());
+        console.log(`🗑️ Removed power-up ${powerUp.type} from scene`);
+      }
+    }
   }
 }

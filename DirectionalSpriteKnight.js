@@ -22,6 +22,10 @@ export class DirectionalSpriteKnight {
     this.isWalking = false;
     this.isRunning = false;
     this.isAttacking = false;
+    
+    // Spell effect integration
+    this.spellEffectManager = null;
+    this.currentPowerUp = null;
   }
 
   async loadAllAnimations(cellSize = 50) {
@@ -263,6 +267,23 @@ export class DirectionalSpriteKnight {
 
   startAttacking(direction = null) {
     this.playAnimation('slashing', direction);
+    
+    // Cast spell effect if knight has a power-up and spell effect manager is available
+    if (this.currentPowerUp && this.spellEffectManager) {
+      console.log(`⚔️ Knight attacking with ${this.currentPowerUp} power-up!`);
+      
+      // Small delay to sync with attack animation
+      setTimeout(() => {
+        this.spellEffectManager.playSpellEffect(
+          this.currentPowerUp,
+          this.sprite.position,
+          this.currentDirection,
+          () => {
+            console.log(`✨ ${this.currentPowerUp} spell effect completed`);
+          }
+        );
+      }, 200); // 0.2 second delay
+    }
   }
 
   goIdle(direction = null) {
@@ -319,5 +340,15 @@ export class DirectionalSpriteKnight {
     this.currentDirection = 'Right';
     this.playAnimation('idle', 'Right');
     console.log('🔄 Knight reset to initial state - facing Right');
+  }
+
+  // Set spell effect manager for casting spells
+  setSpellEffectManager(spellEffectManager) {
+    this.spellEffectManager = spellEffectManager;
+  }
+
+  // Set current power-up
+  setCurrentPowerUp(powerUp) {
+    this.currentPowerUp = powerUp;
   }
 }
