@@ -70,14 +70,6 @@ export class PowerUp {
   }
 
   update(deltaTime) {
-    if (!this.sprite || !this.sprite.visible || !this.isLoaded) {
-      // Debug: log why animation isn't running
-      if (Math.random() < 0.001) { // Very occasional debug
-        console.log(`🔍 ${this.type} not animating: sprite=${!!this.sprite}, visible=${this.sprite?.visible}, loaded=${this.isLoaded}`);
-      }
-      return;
-    }
-    
     this.animationTime += deltaTime;
     
     // Only animate if not collected
