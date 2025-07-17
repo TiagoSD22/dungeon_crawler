@@ -94,7 +94,7 @@ export class EnemyManager {
     // Calculate fighting position based on knight's direction
     let targetX = startX;
     let targetY = startY;
-    const fightDistance = this.cellSize * 0.7; // Distance to move for fighting position
+    const fightDistance = this.cellSize * 0.5; // Distance to move for fighting position
     
     if (knightDirection === 'Right') {
       // Knight facing right, enemy steps to the right
@@ -197,11 +197,11 @@ export class EnemyManager {
 }
 
 class GhostEnemy {
-  constructor(cellSize = 50) {
+  constructor(cellSize = 80) {
     this.sprite = null;
     this.material = null;
     this.cellSize = cellSize;
-    this.baseScale = cellSize * 1.5;
+    this.baseScale = cellSize * 1.1;
     
     // Room position for reset purposes
     this.roomI = -1;
