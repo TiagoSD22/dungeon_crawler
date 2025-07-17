@@ -28,7 +28,7 @@ export class DirectionalSpriteKnight {
     this.currentPowerUp = null;
   }
 
-  async loadAllAnimations(cellSize = 50) {
+  async loadAllAnimations(cellSize = 80) {
     console.log('🎮 Loading all directional knight animations...');
     
     const baseDir = './assets/knight_sprites';
@@ -133,7 +133,7 @@ export class DirectionalSpriteKnight {
     });
   }
 
-  setupInitialSprite(cellSize = 50) {
+  setupInitialSprite(cellSize = 80) {
     // Create initial sprite with first frame of idle animation
     const initialTexture = this.animations['Right']['idle'].frames[0];
     
@@ -146,7 +146,7 @@ export class DirectionalSpriteKnight {
     this.sprite = new THREE.Sprite(this.material);
     
     // Scale proportional to cell size
-    const spriteSize = cellSize * 0.8;
+    const spriteSize = cellSize * 1;
     this.sprite.scale.set(spriteSize, spriteSize, 1);
     
     console.log('🎯 Knight sprite created with scale:', this.sprite.scale);
