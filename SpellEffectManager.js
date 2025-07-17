@@ -22,7 +22,7 @@ export class SpellEffectManager {
     };
   }
 
-  async initialize(scene, cellSize = 50) {
+  async initialize(scene, cellSize = 80) {
     this.scene = scene;
     this.cellSize = cellSize;
     console.log('✨ Initializing spell effect manager...');
@@ -148,7 +148,7 @@ export class SpellEffectManager {
 }
 
 class SpellEffect {
-  constructor(type, cellSize = 50, fileNameMappings = {}) {
+  constructor(type, cellSize = 80, fileNameMappings = {}) {
     this.type = type;
     this.sprite = null;
     this.material = null;
