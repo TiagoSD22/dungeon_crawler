@@ -3,12 +3,14 @@ import dungeonData from './dungeon.json';
 import { DirectionalSpriteKnight } from './DirectionalSpriteKnight.js';
 import { PowerUpManager } from './PowerUpManager.js';
 import { SpellEffectManager } from './SpellEffectManager.js';
+import { EnemyManager } from './EnemyManager.js';
 
 const cellSize = 50;
 let scene, camera, renderer;
 let knight, princess;
 let powerUpManager;
 let spellEffectManager;
+let enemyManager;
 let isAnimating = false;
 let zoomLevel = 1;
 let cameraPosition = { x: 0, y: 0 };
@@ -73,6 +75,11 @@ async function init() {
   powerUpManager = new PowerUpManager();
   await createPowerUps(dungeonData.input);
   
+  // Initialize enemy manager
+  enemyManager = new EnemyManager();
+  await enemyManager.initialize(scene, cellSize);
+  await createEnemies(dungeonData.input);
+  
   // Show loading message
   document.getElementById('playBtn').textContent = '🔄 Loading Knight Animations...';
   document.getElementById('playBtn').disabled = true;
@@ -133,6 +140,21 @@ async function createPowerUps(grid) {
   }
   
   console.log('✅ Power-ups created successfully!');
+}
+
+async function createEnemies(grid) {
+  console.log('👻 Creating enemies for threat rooms...');
+  
+  for (let i = 0; i < grid.length; i++) {
+    for (let j = 0; j < grid[i].length; j++) {
+      const roomValue = grid[i][j];
+      if (roomValue < 0) {
+        await enemyManager.createEnemyForRoom(i, j, roomValue, cellSize, scene, grid[0].length, grid.length);
+      }
+    }
+  }
+  
+  console.log('✅ Enemies created successfully!');
 }
 
 function createGridLines(grid) {
@@ -252,6 +274,13 @@ function startAnimation() {
   powerUpManager.dispose();
   powerUpManager = new PowerUpManager();
   createPowerUps(dungeonData.input);
+  
+  // Reset enemies (recreate them)
+  enemyManager.removeFromScene(scene);
+  enemyManager.dispose();
+  enemyManager = new EnemyManager();
+  enemyManager.initialize(scene, cellSize);
+  createEnemies(dungeonData.input);
   
   // Reset knight's power-up
   if (knight.characterController) {
@@ -382,6 +411,11 @@ function animatePath() {
           if (isEnteringRoom) {
             console.log(`🏠 Knight entered room with value: ${roomValue}`);
             
+            // Notify enemy manager if entering a threat room
+            if (isThreatRoom) {
+              enemyManager.onKnightEntersRoom(i, j, direction);
+            }
+            
             if (isThreatRoom) {
               // Threat room - attack animation
               console.log('⚔️ Threat room detected - attacking!');
@@ -473,6 +507,11 @@ function animate() {
   // Update spell effects
   if (spellEffectManager) {
     spellEffectManager.updateAll(0.016);
+  }
+  
+  // Update enemies
+  if (enemyManager) {
+    enemyManager.updateAllEnemies(0.016);
   }
   
   renderer.render(scene, camera);
