@@ -4,11 +4,11 @@ export class EnemyManager {
   constructor() {
     this.enemies = new Map(); // Map of position key -> Enemy instance
     this.scene = null;
-    this.cellSize = 50;
+    this.cellSize = 80;
     console.log('👻 EnemyManager initialized');
   }
 
-  async initialize(scene, cellSize = 50) {
+  async initialize(scene, cellSize = 80) {
     this.scene = scene;
     this.cellSize = cellSize;
     console.log('👻 Initializing enemy manager...');
@@ -29,6 +29,10 @@ export class EnemyManager {
     try {
       const enemy = new GhostEnemy(cellSize);
       await enemy.initialize();
+      
+      // Store room position for reset purposes
+      enemy.roomI = i;
+      enemy.roomJ = j;
       
       // Position in the center of the room
       const x = j * cellSize - (gridWidth * cellSize) / 2;
@@ -69,7 +73,102 @@ export class EnemyManager {
       }
       
       enemy.setDirection(enemyDirection);
-      console.log(`👻 Enemy now facing ${enemyDirection}`);
+      
+      // Start fight positioning animation
+      this.startFightPositioning(enemy, knightDirection, i, j);
+      
+      console.log(`👻 Enemy now facing ${enemyDirection} and positioning for fight`);
+    }
+  }
+
+  startFightPositioning(enemy, knightDirection, roomI, roomJ) {
+    // Get current enemy position
+    const currentPos = enemy.getObject3D().position;
+    const startX = currentPos.x;
+    const startY = currentPos.y;
+    
+    // Calculate room center (original position)
+    const roomCenterX = roomJ * this.cellSize - (this.scene.userData.gridWidth * this.cellSize) / 2;
+    const roomCenterY = -roomI * this.cellSize + (this.scene.userData.gridHeight * this.cellSize) / 2;
+    
+    // Calculate fighting position based on knight's direction
+    let targetX = startX;
+    let targetY = startY;
+    const fightDistance = this.cellSize * 0.7; // Distance to move for fighting position
+    
+    if (knightDirection === 'Right') {
+      // Knight facing right, enemy steps to the right
+      targetX = roomCenterX + fightDistance;
+      targetY = roomCenterY;
+    } else if (knightDirection === 'Front') {
+      // Knight facing front, enemy steps back
+      targetX = roomCenterX;
+      targetY = roomCenterY - fightDistance;
+    } else if (knightDirection === 'Left') {
+      // Knight facing left, enemy steps to the left
+      targetX = roomCenterX - fightDistance;
+      targetY = roomCenterY;
+    } else if (knightDirection === 'Back') {
+      // Knight facing back, enemy steps forward
+      targetX = roomCenterX;
+      targetY = roomCenterY - fightDistance;
+    }
+    
+    // Animate to fighting position
+    this.animateEnemyToPosition(enemy, targetX, targetY, 400); // 400ms animation
+  }
+
+  animateEnemyToPosition(enemy, targetX, targetY, duration = 400) {
+    const startTime = Date.now();
+    const enemySprite = enemy.getObject3D();
+    const startX = enemySprite.position.x;
+    const startY = enemySprite.position.y;
+    
+    console.log(`⚔️ Animating enemy from (${startX}, ${startY}) to (${targetX}, ${targetY})`);
+    
+    function animateStep() {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease-out animation for smooth movement
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      
+      // Interpolate position
+      enemySprite.position.x = startX + (targetX - startX) * easeProgress;
+      enemySprite.position.y = startY + (targetY - startY) * easeProgress;
+      
+      // Add slight bounce effect at the end
+      if (progress > 0.8) {
+        const bounceProgress = (progress - 0.8) / 0.2;
+        const bounceHeight = Math.sin(bounceProgress * Math.PI) * 3;
+        enemySprite.position.z = 15 + bounceHeight;
+      }
+      
+      if (progress < 1) {
+        requestAnimationFrame(animateStep);
+      } else {
+        console.log(`✅ Enemy positioned for fight at (${targetX}, ${targetY})`);
+      }
+    }
+    
+    animateStep();
+  }
+
+  resetEnemyPosition(enemy, roomI, roomJ) {
+    // Reset enemy to center of room
+    const roomCenterX = roomJ * this.cellSize - (this.scene.userData.gridWidth * this.cellSize) / 2;
+    const roomCenterY = -roomI * this.cellSize + (this.scene.userData.gridHeight * this.cellSize) / 2;
+    
+    this.animateEnemyToPosition(enemy, roomCenterX, roomCenterY, 300); // Quick reset
+  }
+
+  resetAllEnemyPositions() {
+    console.log('🔄 Resetting all enemy positions to room centers');
+    for (const enemy of this.enemies.values()) {
+      const roomPos = enemy.getRoomPosition();
+      if (roomPos.i >= 0 && roomPos.j >= 0) {
+        this.resetEnemyPosition(enemy, roomPos.i, roomPos.j);
+      }
     }
   }
 
@@ -103,6 +202,10 @@ class GhostEnemy {
     this.material = null;
     this.cellSize = cellSize;
     this.baseScale = cellSize * 1.5;
+    
+    // Room position for reset purposes
+    this.roomI = -1;
+    this.roomJ = -1;
     
     // Animation properties
     this.spriteSheet = null;
@@ -225,6 +328,10 @@ class GhostEnemy {
 
   getObject3D() {
     return this.sprite;
+  }
+
+  getRoomPosition() {
+    return { i: this.roomI, j: this.roomJ };
   }
 
   dispose() {
