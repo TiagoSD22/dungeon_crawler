@@ -102,7 +102,7 @@ class GhostEnemy {
     this.sprite = null;
     this.material = null;
     this.cellSize = cellSize;
-    this.baseScale = cellSize * 0.8;
+    this.baseScale = cellSize * 1.5;
     
     // Animation properties
     this.spriteSheet = null;
