@@ -4,7 +4,7 @@ A 3D interactive visualization of the classic **Dungeon Princess** problem, buil
 
 ## 🎮 Demo
 
-![Dungeon Rescue Demo](https://github.com/user-attachments/assets/e51a4f80-1e0f-430e-b4e0-27d86b3b7bdf)
+![Dungeon Rescue Demo](/dungeon_crawler_demo_big.gif)
 
 *Watch the knight navigate through the dungeon to rescue the princess!*
 
