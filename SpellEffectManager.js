@@ -85,13 +85,15 @@ export class SpellEffectManager {
   calculateSpellPosition(knightPosition, direction) {
     let offsetX = 0;
     let offsetZ = 0;
+    let offsetY = 0; // Y offset can be adjusted if needed
     
     switch (direction) {
       case 'Right':
         offsetX = 30; // To the right of knight
         break;
       case 'Front':
-        offsetZ = 30; // In front of knight
+        offsetZ = 20; // In front of knight
+        offsetY = -20;
         break;
       case 'Left':
         offsetX = -30; // To the left of knight
@@ -105,7 +107,7 @@ export class SpellEffectManager {
     
     return {
       x: knightPosition.x + offsetX,
-      y: knightPosition.y,
+      y: knightPosition.y + offsetY,
       z: knightPosition.z + offsetZ + 5 // Slightly above ground
     };
   }
@@ -114,7 +116,7 @@ export class SpellEffectManager {
     if (!spellEffect.sprite) return;
     
     // Spells that need rotation when moving along Z-axis (depth)
-    const spellsRequiringRotation = ['comet', 'fire', 'gypno', 'ice', 'water'];
+    const spellsRequiringRotation = ['comet', 'fire', 'gypno', 'ice', 'spikes', 'water'];
     
     // Reset rotation first
     spellEffect.sprite.material.rotation = 0;
@@ -123,7 +125,7 @@ export class SpellEffectManager {
     if (direction === 'Front' || direction === 'Back') {
       // When knight faces front/back, rotate specific spells 90° clockwise
       if (spellsRequiringRotation.includes(spellType)) {
-        spellEffect.sprite.material.rotation = Math.PI / 2; // 90 degrees clockwise
+        spellEffect.sprite.material.rotation = 3 * Math.PI / 2; // 90 degrees clockwise
         console.log(`🔄 Rotating ${spellType} spell 90° for depth movement`);
       }
     }
@@ -269,7 +271,7 @@ class SpellEffect {
       case 'Front':
         this.targetPosition = {
           x: this.startPosition.x,
-          y: this.startPosition.y,
+          y: this.startPosition.y - moveDistance,
           z: this.startPosition.z + moveDistance
         };
         break;
