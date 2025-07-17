@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import dungeonData from './dungeon.json';
+import { DirectionalSpriteKnight } from './DirectionalSpriteKnight.js';
 
 const cellSize = 50;
 let scene, camera, renderer;
@@ -12,9 +13,28 @@ let lastMousePosition = { x: 0, y: 0 };
 
 init();
 
-function init() {
+async function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
+
+  // Add lighting for better 3D model visualization
+  const ambientLight = new THREE.AmbientLight(0x404040, 1.0); // Brighter ambient light
+  scene.add(ambientLight);
+  
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  directionalLight.position.set(100, 100, 200);
+  directionalLight.castShadow = true;
+  // Configure shadow properties for better quality
+  directionalLight.shadow.mapSize.width = 2048;
+  directionalLight.shadow.mapSize.height = 2048;
+  directionalLight.shadow.camera.near = 0.5;
+  directionalLight.shadow.camera.far = 500;
+  scene.add(directionalLight);
+  
+  // Add a fill light from the opposite direction
+  const fillLight = new THREE.DirectionalLight(0x8080ff, 0.4);
+  fillLight.position.set(-100, -100, 100);
+  scene.add(fillLight);
 
   // Calculate dungeon dimensions for proper camera setup
   const dungeonWidth = dungeonData.input[0].length * cellSize;
@@ -34,6 +54,8 @@ function init() {
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.appendChild(renderer.domElement);
 
   document.getElementById('minHp').textContent = `Minimum HP Required: ${dungeonData.min_hp}`;
@@ -42,7 +64,17 @@ function init() {
   createDungeon(dungeonData.input);
   createGridLines(dungeonData.input);
   createPrincess(dungeonData.input);
-  createKnight();
+  
+  // Show loading message
+  document.getElementById('playBtn').textContent = '🔄 Loading Knight Animations...';
+  document.getElementById('playBtn').disabled = true;
+  
+  // Wait for Knight animations to load before enabling play button
+  await createKnight();
+  
+  // Enable play button once Knight animations are loaded
+  document.getElementById('playBtn').textContent = '▶️ Start Rescue';
+  document.getElementById('playBtn').disabled = false;
   
   // Add event listeners
   document.getElementById('playBtn').addEventListener('click', startAnimation);
@@ -111,20 +143,60 @@ function createPrincess(grid) {
   scene.add(princess);
 }
 
-function createKnight() {
-  knight = new THREE.Mesh(
-    new THREE.CylinderGeometry(cellSize / 3, cellSize / 3, cellSize / 2, 8),
-    new THREE.MeshBasicMaterial({ color: 0x00ffff })
-  );
+async function createKnight() {
+  // Create the Directional Sprite Knight character
+  const directionalKnight = new DirectionalSpriteKnight();
   
-  // Start at the first position of the path
-  const path = dungeonData.path;
-  const [i, j] = path[0];
-  knight.position.x = j * cellSize - (dungeonData.input[0].length * cellSize) / 2;
-  knight.position.y = -i * cellSize + (dungeonData.input.length * cellSize) / 2;
-  knight.position.z = 10;
-  
-  scene.add(knight);
+  try {
+    console.log('Loading directional knight sprites...');
+    // Load all directional animations
+    await directionalKnight.loadAllAnimations(cellSize);
+    
+    knight = directionalKnight.getObject3D();
+    console.log('Directional knight sprite created:', knight);
+    
+    // Position knight outside the dungeon (to the left of the starting position)
+    const path = dungeonData.path;
+    const [startI, startJ] = path[0];
+    const startX = startJ * cellSize - (dungeonData.input[0].length * cellSize) / 2;
+    const startY = -startI * cellSize + (dungeonData.input.length * cellSize) / 2;
+    
+    // Place knight outside the dungeon (2 cells to the left)
+    knight.position.x = startX - (cellSize * 2);
+    knight.position.y = startY;
+    knight.position.z = 15;
+    
+    // Store the character controller and starting position for animations
+    knight.characterController = directionalKnight;
+    knight.startingPosition = { x: startX, y: startY, z: 15 };
+    
+    scene.add(knight);
+    
+    console.log('Directional knight sprite loaded and added to scene successfully!');
+    console.log('Knight entrance position:', knight.position);
+    console.log('Knight target position:', knight.startingPosition);
+  } catch (error) {
+    console.error('Failed to load Directional Knight sprite:', error);
+    
+    // Fallback to a simple geometry if sprite fails to load
+    console.log('Using fallback geometry for knight');
+    knight = new THREE.Mesh(
+      new THREE.CylinderGeometry(cellSize / 3, cellSize / 3, cellSize / 2, 8),
+      new THREE.MeshPhongMaterial({ 
+        color: 0x4169E1,
+        emissive: 0x111111 // Add slight glow to fallback
+      })
+    );
+    
+    const path = dungeonData.path;
+    const [i, j] = path[0];
+    knight.position.x = j * cellSize - (dungeonData.input[0].length * cellSize) / 2;
+    knight.position.y = -i * cellSize + (dungeonData.input.length * cellSize) / 2;
+    knight.position.z = 10;
+    
+    scene.add(knight);
+    console.log('Using fallback knight geometry');
+  }
 }
 
 function startAnimation() {
@@ -134,7 +206,73 @@ function startAnimation() {
   document.getElementById('playBtn').disabled = true;
   document.getElementById('playBtn').textContent = '⏳ Rescue in Progress...';
   
-  animatePath();
+  // Reset knight to initial state (facing right) and position outside dungeon
+  if (knight.characterController) {
+    knight.characterController.resetToInitialState();
+  }
+  
+  // Position knight outside the dungeon for entrance
+  const path = dungeonData.path;
+  const [startI, startJ] = path[0];
+  const startX = startJ * cellSize - (dungeonData.input[0].length * cellSize) / 2;
+  const startY = -startI * cellSize + (dungeonData.input.length * cellSize) / 2;
+  
+  knight.position.x = startX - (cellSize * 2);
+  knight.position.y = startY;
+  knight.position.z = 15;
+  
+  // Store starting position
+  knight.startingPosition = { x: startX, y: startY, z: 15 };
+  
+  // Start entrance animation
+  animateEntrance();
+}
+
+function animateEntrance() {
+  console.log('🚪 Knight entering the dungeon...');
+  
+  // Start running animation facing right
+  if (knight.characterController) {
+    knight.characterController.startRunning('Right');
+  }
+  
+  // Animate entrance to the first position
+  const targetX = knight.startingPosition.x;
+  const targetY = knight.startingPosition.y;
+  const targetZ = knight.startingPosition.z;
+  
+  const startX = knight.position.x;
+  const startY = knight.position.y;
+  const duration = 800; // Slightly longer entrance
+  const startTime = Date.now();
+  
+  function animateEntranceMove() {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Ease-in-out animation
+    const easeProgress = progress < 0.5 
+      ? 2 * progress * progress 
+      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+    
+    knight.position.x = startX + (targetX - startX) * easeProgress;
+    knight.position.y = startY + (targetY - startY) * easeProgress;
+    knight.position.z = targetZ + Math.sin(progress * Math.PI) * 2;
+    
+    if (progress < 1) {
+      requestAnimationFrame(animateEntranceMove);
+    } else {
+      // Entrance complete, pause briefly then start dungeon traversal
+      console.log('✅ Knight has entered the dungeon!');
+      
+      // Brief pause before starting the main path
+      setTimeout(() => {
+        animatePath();
+      }, 300);
+    }
+  }
+  
+  animateEntranceMove();
 }
 
 function animatePath() {
@@ -144,6 +282,23 @@ function animatePath() {
   function moveKnight() {
     if (step < path.length) {
       const [i, j] = path[step];
+      
+      // Check if entering a room (non-zero value)
+      const roomValue = dungeonData.input[i][j];
+      const isEnteringRoom = roomValue !== 0;
+      const isThreatRoom = roomValue < 0;
+      
+      // Determine movement direction based on path
+      let direction = 'Right'; // Default
+      if (step > 0) {
+        const prevPos = path[step - 1];
+        direction = knight.characterController.getDirectionFromMovement(prevPos, [i, j]);
+      }
+      
+      // Start running animation for movement in the determined direction
+      if (knight.characterController) {
+        knight.characterController.startRunning(direction);
+      }
       
       // Animate knight movement
       const targetX = j * cellSize - (dungeonData.input[0].length * cellSize) / 2;
@@ -167,14 +322,46 @@ function animatePath() {
         knight.position.x = startX + (targetX - startX) * easeProgress;
         knight.position.y = startY + (targetY - startY) * easeProgress;
         
-        // Add a slight bounce effect
-        knight.position.z = 10 + Math.sin(progress * Math.PI) * 5;
+        // Add a very subtle bounce effect
+        knight.position.z = 15 + Math.sin(progress * Math.PI) * 2;
         
         if (progress < 1) {
           requestAnimationFrame(animateMove);
         } else {
+          // Movement complete
           step++;
-          setTimeout(moveKnight, 200); // Pause between moves
+          
+          // Handle room entry
+          if (isEnteringRoom) {
+            console.log(`🏠 Knight entered room with value: ${roomValue}`);
+            
+            if (isThreatRoom) {
+              // Threat room - attack animation
+              console.log('⚔️ Threat room detected - attacking!');
+              knight.characterController.startAttacking(direction);
+              
+              // Wait for attack animation to complete, then pause
+              setTimeout(() => {
+                knight.characterController.goIdle(direction);
+                setTimeout(() => {
+                  moveKnight(); // Continue after attack and pause
+                }, 1500); // 1.5 second pause after attack
+              }, 1000); // 1 second for attack animation
+              
+            } else {
+              // Power room - just idle
+              console.log('💪 Power room detected - resting');
+              knight.characterController.goIdle(direction);
+              
+              // Pause for 2 seconds in power room
+              setTimeout(() => {
+                moveKnight(); // Continue after pause
+              }, 2000);
+            }
+          } else {
+            // Normal pause between moves (corridor movement)
+            setTimeout(moveKnight, 200);
+          }
         }
       }
       
@@ -190,7 +377,7 @@ function animatePath() {
         const [i, j] = path[0];
         knight.position.x = j * cellSize - (dungeonData.input[0].length * cellSize) / 2;
         knight.position.y = -i * cellSize + (dungeonData.input.length * cellSize) / 2;
-        knight.position.z = 10;
+        knight.position.z = 15;
       }, 1000);
     }
   }
@@ -200,6 +387,18 @@ function animatePath() {
 
 function animate() {
   requestAnimationFrame(animate);
+  
+  // Update knight animation if it exists
+  if (knight && knight.characterController) {
+    if (knight.characterController.mixer) {
+      // For 3D models with animation mixer
+      knight.characterController.mixer.update(0.016); // ~60fps
+    } else if (knight.characterController.update) {
+      // For sprite-based characters
+      knight.characterController.update(0.016);
+    }
+  }
+  
   renderer.render(scene, camera);
 }
 
