@@ -5,7 +5,7 @@ import { PowerUpManager } from './PowerUpManager.js';
 import { SpellEffectManager } from './SpellEffectManager.js';
 import { EnemyManager } from './EnemyManager.js';
 
-const cellSize = 50;
+const cellSize = 120;
 let scene, camera, renderer;
 let knight, princess;
 let powerUpManager;
@@ -77,7 +77,12 @@ async function init() {
   
   // Initialize enemy manager
   enemyManager = new EnemyManager();
-  await enemyManager.initialize(scene, cellSize);
+  await enemyManager.initialize(scene);
+  
+  // Store grid dimensions for enemy positioning
+  scene.userData.gridWidth = dungeonData.input[0].length;
+  scene.userData.gridHeight = dungeonData.input.length;
+  
   await createEnemies(dungeonData.input);
   
   // Show loading message
@@ -89,7 +94,7 @@ async function init() {
   
   // Initialize spell effect manager
   spellEffectManager = new SpellEffectManager();
-  await spellEffectManager.initialize(scene, cellSize);
+  await spellEffectManager.initialize(scene);
   
   // Connect knight with spell effect manager
   knight.characterController.setSpellEffectManager(spellEffectManager);
@@ -206,7 +211,7 @@ async function createKnight() {
   try {
     console.log('Loading directional knight sprites...');
     // Load all directional animations
-    await directionalKnight.loadAllAnimations(cellSize);
+    await directionalKnight.loadAllAnimations();
     
     knight = directionalKnight.getObject3D();
     console.log('Directional knight sprite created:', knight);
@@ -280,6 +285,11 @@ function startAnimation() {
   enemyManager.dispose();
   enemyManager = new EnemyManager();
   enemyManager.initialize(scene, cellSize);
+  
+  // Restore grid dimensions for enemy positioning
+  scene.userData.gridWidth = dungeonData.input[0].length;
+  scene.userData.gridHeight = dungeonData.input.length;
+  
   createEnemies(dungeonData.input);
   
   // Reset knight's power-up
