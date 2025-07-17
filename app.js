@@ -624,6 +624,11 @@ function setupCameraControls() {
         resetCamera();
         event.preventDefault();
         break;
+      case 'f':
+      case 'F':
+        focusOnKnight();
+        event.preventDefault();
+        break;
     }
   });
 
@@ -682,3 +687,60 @@ window.addEventListener('resize', onWindowResize);
 
 // Make resetCamera function global so it can be called from HTML
 window.resetCamera = resetCamera;
+
+// Make focusOnKnight function global so it can be called from HTML
+window.focusOnKnight = focusOnKnight;
+
+function focusOnKnight() {
+  if (!knight) {
+    console.warn('Knight not found');
+    return;
+  }
+  
+  // Store current camera position for smooth transition
+  const startZoom = zoomLevel;
+  const startX = cameraPosition.x;
+  const startY = cameraPosition.y;
+  
+  // Target values
+  const targetZoom = 0.1; // Smaller value = closer zoom for better visibility
+  const targetX = knight.position.x;
+  const targetY = knight.position.y;
+  
+  // Animate to knight position
+  const animationDuration = 800; // 0.8 seconds
+  const startTime = Date.now();
+  
+  function animateToKnight() {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(elapsed / animationDuration, 1);
+    
+    // Easing function for smooth animation
+    const easeProgress = 1 - Math.pow(1 - progress, 3);
+    
+    // Interpolate camera position and zoom
+    zoomLevel = startZoom + (targetZoom - startZoom) * easeProgress;
+    cameraPosition.x = startX + (targetX - startX) * easeProgress;
+    cameraPosition.y = startY + (targetY - startY) * easeProgress;
+    
+    // Update camera
+    updateCameraZoom();
+    updateCameraPosition();
+    
+    if (progress < 1) {
+      requestAnimationFrame(animateToKnight);
+    } else {
+      console.log(`📍 Camera focused on knight at position (${knight.position.x}, ${knight.position.y})`);
+    }
+  }
+  
+  // Start animation
+  animateToKnight();
+  
+  // Visual feedback on button
+  const button = document.getElementById('focusKnightBtn');
+  button.style.background = '#4CAF50';
+  setTimeout(() => {
+    button.style.background = '#2196F3';
+  }, 200);
+}
