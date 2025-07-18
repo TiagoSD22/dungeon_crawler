@@ -4,6 +4,7 @@ import { DirectionalSpriteKnight } from './DirectionalSpriteKnight.js';
 import { PowerUpManager } from './PowerUpManager.js';
 import { SpellEffectManager } from './SpellEffectManager.js';
 import { EnemyManager } from './EnemyManager.js';
+import { FightManager } from './FightManager.js';
 
 const cellSize = 120;
 let scene, camera, renderer;
@@ -11,6 +12,7 @@ let knight, princess;
 let powerUpManager;
 let spellEffectManager;
 let enemyManager;
+let fightManager;
 let isAnimating = false;
 let zoomLevel = 1;
 let cameraPosition = { x: 0, y: 0 };
@@ -95,6 +97,9 @@ async function init() {
   // Initialize spell effect manager
   spellEffectManager = new SpellEffectManager();
   await spellEffectManager.initialize(scene);
+  
+  // Initialize fight manager
+  fightManager = new FightManager(scene, cellSize);
   
   // Connect knight with spell effect manager
   knight.characterController.setSpellEffectManager(spellEffectManager);
@@ -286,6 +291,12 @@ function startAnimation() {
   enemyManager = new EnemyManager();
   enemyManager.initialize(scene, cellSize);
   
+  // Reset fight manager
+  if (fightManager) {
+    fightManager.dispose();
+  }
+  fightManager = new FightManager(scene, cellSize);
+  
   // Restore grid dimensions for enemy positioning
   scene.userData.gridWidth = dungeonData.input[0].length;
   scene.userData.gridHeight = dungeonData.input.length;
@@ -427,17 +438,40 @@ function animatePath() {
             }
             
             if (isThreatRoom) {
-              // Threat room - attack animation
-              console.log('⚔️ Threat room detected - attacking!');
-              knight.characterController.startAttacking(direction);
+              // Threat room - check for enemy and start fight
+              console.log('⚔️ Threat room detected - checking for enemy!');
               
-              // Wait for attack animation to complete, then pause
-              setTimeout(() => {
+              const enemy = enemyManager.getEnemyAt(i, j);
+              
+              if (enemy && !enemy.isDead) {
+                console.log(`👻 Knight encounters enemy at (${i}, ${j})!`);
+                
+                // Start fight
+                fightManager.startFight(
+                  knight.characterController,
+                  enemy,
+                  direction,
+                  () => {
+                    // Fight completed callback
+                    enemy.isDead = true;
+                    console.log(`✅ Fight completed! Enemy defeated.`);
+                    
+                    // Continue movement after fight
+                    setTimeout(() => {
+                      knight.characterController.goIdle(direction);
+                      setTimeout(() => {
+                        moveKnight(); // Continue after fight
+                      }, 1000);
+                    }, 500);
+                  }
+                );
+              } else {
+                // No enemy or already dead - just continue
                 knight.characterController.goIdle(direction);
                 setTimeout(() => {
-                  moveKnight(); // Continue after attack and pause
-                }, 1500); // 1.5 second pause after attack
-              }, 1000); // 1 second for attack animation
+                  moveKnight(); // Continue after pause
+                }, 1000);
+              }
               
             } else {
               // Power room - collect power-up and idle
