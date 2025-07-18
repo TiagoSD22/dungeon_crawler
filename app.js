@@ -164,7 +164,10 @@ async function createEnemies(grid) {
     }
   }
   
+  // Log enemy distribution
+  const enemyStats = enemyManager.getEnemyCountByType();
   console.log('✅ Enemies created successfully!');
+  console.log('📊 Enemy Distribution:', enemyStats);
 }
 
 function createGridLines(grid) {
