@@ -59,6 +59,9 @@ export class DirectionalSpriteKnight {
       await Promise.all(loadPromises);
       console.log('✅ All knight animations loaded successfully');
       
+      // Load hurt animations for all directions
+      await this.loadHurtAnimations();
+      
       // Setup initial sprite
       this.setupInitialSprite(cellSize);
       
@@ -221,8 +224,13 @@ export class DirectionalSpriteKnight {
           this.currentFrame = this.currentAnimation.frameCount - 1; // Stay on last frame
           this.isPlaying = false;
           
+          // Call completion callback if exists
+          if (this.onAnimationComplete) {
+            this.onAnimationComplete();
+          }
+          
           // If attack finished, return to idle
-          if (this.isAttacking) {
+          if (this.isAttacking && !this.onAnimationComplete) {
             setTimeout(() => {
               this.playAnimation('idle');
             }, 100);
@@ -263,27 +271,6 @@ export class DirectionalSpriteKnight {
 
   startRunning(direction = null) {
     this.playAnimation('running', direction);
-  }
-
-  startAttacking(direction = null) {
-    this.playAnimation('slashing', direction);
-    
-    // Cast spell effect if knight has a power-up and spell effect manager is available
-    if (this.currentPowerUp && this.spellEffectManager) {
-      console.log(`⚔️ Knight attacking with ${this.currentPowerUp} power-up!`);
-      
-      // Small delay to sync with attack animation
-      setTimeout(() => {
-        this.spellEffectManager.playSpellEffect(
-          this.currentPowerUp,
-          this.sprite.position,
-          this.currentDirection,
-          () => {
-            console.log(`✨ ${this.currentPowerUp} spell effect completed`);
-          }
-        );
-      }, 200); // 0.2 second delay
-    }
   }
 
   goIdle(direction = null) {
@@ -350,5 +337,142 @@ export class DirectionalSpriteKnight {
   // Set current power-up
   setCurrentPowerUp(powerUp) {
     this.currentPowerUp = powerUp;
+  }
+
+  // Load hurt animations for all directions
+  async loadHurtAnimations() {
+    console.log('😰 Loading knight hurt animations...');
+    
+    const baseDir = './assets/knight_sprites';
+    const directions = ['Right', 'Front'];
+    
+    for (const direction of directions) {
+      if (!this.animations[direction]) {
+        this.animations[direction] = {};
+      }
+      
+      try {
+        // Updated path to match the actual folder structure
+        const hurtPath = `${baseDir}/${direction.toLowerCase()}/${direction}-Hurt`;
+        const frames = await this.loadAnimationFrames(hurtPath);
+        
+        this.animations[direction]['hurt'] = {
+          frames: frames,
+          frameCount: frames.length,
+          currentFrame: 0
+        };
+        
+        console.log(`✅ Loaded ${direction} hurt animation: ${frames.length} frames`);
+      } catch (error) {
+        console.warn(`⚠️ Could not load ${direction} hurt animation:`, error);
+        // Try alternative path structure
+        try {
+          const alternativePath = `${baseDir}/knight_${direction.toLowerCase()}/${direction}-Hurt`;
+          const frames = await this.loadAnimationFrames(alternativePath);
+          
+          this.animations[direction]['hurt'] = {
+            frames: frames,
+            frameCount: frames.length,
+            currentFrame: 0
+          };
+          
+          console.log(`✅ Loaded ${direction} hurt animation (alternative path): ${frames.length} frames`);
+        } catch (altError) {
+          console.warn(`⚠️ Could not load ${direction} hurt animation from alternative path:`, altError);
+          // Create empty hurt animation as fallback
+          this.animations[direction]['hurt'] = {
+            frames: [],
+            frameCount: 0,
+            currentFrame: 0
+          };
+        }
+      }
+    }
+  }
+
+  // Play hurt animation
+  async playHurtAnimation(direction = null) {
+    if (direction) {
+      this.currentDirection = direction;
+    }
+    
+    console.log(`😰 Playing knight hurt animation: ${this.currentDirection}`);
+    
+    // Check if hurt animation exists for current direction
+    const hurtAnimation = this.animations[this.currentDirection]?.hurt;
+    if (!hurtAnimation || hurtAnimation.frameCount === 0) {
+      console.warn(`⚠️ No hurt animation for direction: ${this.currentDirection}, using idle instead`);
+      // Fallback to idle animation with faster speed
+      this.playAnimation('idle', this.currentDirection);
+      this.animationSpeed = 0.05; // Fast animation for hurt effect
+      
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          this.animationSpeed = 0.15; // Reset to normal idle speed
+          resolve();
+        }, 500);
+      });
+    }
+    
+    return new Promise((resolve) => {
+      // Stop current animation
+      this.isPlaying = false;
+      
+      // Set up hurt animation
+      this.currentAnimation = hurtAnimation;
+      this.currentFrame = 0;
+      this.isPlaying = true;
+      this.loop = false;
+      this.animationSpeed = 0.08; // Medium speed for hurt animation
+      
+      // Update sprite texture immediately
+      this.updateSpriteTexture();
+      
+      // Set up completion callback
+      this.onAnimationComplete = () => {
+        console.log(`✅ Knight hurt animation completed`);
+        this.onAnimationComplete = null;
+        this.loop = true; // Reset loop for other animations
+        // Return to idle after hurt
+        this.playAnimation('idle', this.currentDirection);
+        resolve();
+      };
+    });
+  }
+
+  // Play attack animation
+  async playAttackAnimation() {
+    console.log(`⚔️ Knight attacks!`);
+    
+    return new Promise((resolve) => {
+      // Use existing slashing animation
+      this.playAnimation('slashing');
+      
+      // Cast spell effect if knight has a power-up and spell effect manager is available
+      if (this.currentPowerUp && this.spellEffectManager) {
+        console.log(`⚔️ Knight attacking with ${this.currentPowerUp} power-up!`);
+        
+        // Small delay to sync with attack animation
+        setTimeout(() => {
+          this.spellEffectManager.playSpellEffect(
+            this.currentPowerUp,
+            this.sprite.position,
+            this.currentDirection,
+            () => {
+              console.log(`✨ ${this.currentPowerUp} spell effect completed`);
+            }
+          );
+        }, 200); // 0.2 second delay
+      }
+
+      this.loop = false;
+      
+      // Set up completion callback
+      this.onAnimationComplete = () => {
+        this.onAnimationComplete = null;
+        this.loop = true; // Reset loop for other animations
+        resolve();
+      };
+    });
   }
 }
