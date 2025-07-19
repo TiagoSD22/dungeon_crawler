@@ -444,6 +444,21 @@ function animatePath() {
           // Movement complete
           step++;
           
+          // Mark the previous cell as visited (if there was a previous step)
+          if (step > 1) {
+            const [prevI, prevJ] = path[step - 2];
+            if (environmentManager) {
+              environmentManager.markCellAsVisited(
+                prevI, 
+                prevJ, 
+                cellSize, 
+                scene, 
+                dungeonData.input[0].length, 
+                dungeonData.input.length
+              );
+            }
+          }
+          
           // Handle room entry
           if (isEnteringRoom) {
             console.log(`🏠 Knight entered room with value: ${roomValue}`);
@@ -527,7 +542,21 @@ function animatePath() {
       
       animateMove();
     } else {
-      // Animation complete
+      // Animation complete - mark final cell as visited
+      if (path.length > 0) {
+        const [finalI, finalJ] = path[path.length - 1];
+        if (environmentManager) {
+          environmentManager.markCellAsVisited(
+            finalI, 
+            finalJ, 
+            cellSize, 
+            scene, 
+            dungeonData.input[0].length, 
+            dungeonData.input.length
+          );
+        }
+      }
+      
       setTimeout(() => {
         document.getElementById('playBtn').disabled = false;
         document.getElementById('playBtn').textContent = '🔄 Restart Rescue Mission';
