@@ -9,6 +9,8 @@ export class EnvironmentManager {
     };
     this.isLoaded = false;
     this.floorSprites = [];
+    this.visitedCells = new Set(); // Track visited cells
+    this.darkOverlays = []; // Store dark overlays for visited cells
     
     // Load all floor textures
     this.loadTextures();
@@ -88,7 +90,7 @@ export class EnvironmentManager {
     this.floorSprites.push(baseFloor);
 
     // 30% chance to add a floor layer
-    if (Math.random() < 0.3) {
+    if (Math.random() < 0.6) {
       const useLayer1 = Math.random() < 0.5;
       const layerTexture = useLayer1 ? this.floorTextures.layers.layer1 : this.floorTextures.layers.layer2;
       
@@ -168,7 +170,78 @@ export class EnvironmentManager {
       sprite.material.dispose();
     });
     this.floorSprites = [];
+    
+    // Also clear visited cells when clearing floors
+    this.clearVisitedCells(scene);
+    
     console.log('🧹 Cleared all floor elements');
+  }
+
+  // Method to mark a cell as visited and darken it
+  markCellAsVisited(gridI, gridJ, cellSize, scene, gridWidth, gridHeight) {
+    const cellKey = `${gridI},${gridJ}`;
+    
+    // Don't add overlay if already visited
+    if (this.visitedCells.has(cellKey)) {
+      return;
+    }
+    
+    this.visitedCells.add(cellKey);
+    
+    // Calculate position (same as floor positioning)
+    const x = gridJ * cellSize - (gridWidth * cellSize) / 2;
+    const y = -gridI * cellSize + (gridHeight * cellSize) / 2;
+    
+    // Create a dark overlay
+    const darkMaterial = new THREE.SpriteMaterial({
+      color: 0x000000, // Black
+      transparent: true,
+      opacity: 0.3 // 30% opacity for subtle darkening
+    });
+    
+    // Create a simple dark quad using a minimal texture
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, 32, 32);
+    
+    const darkTexture = new THREE.CanvasTexture(canvas);
+    darkTexture.magFilter = THREE.NearestFilter;
+    darkTexture.minFilter = THREE.NearestFilter;
+    
+    darkMaterial.map = darkTexture;
+    
+    const darkOverlay = new THREE.Sprite(darkMaterial);
+    darkOverlay.scale.set(cellSize * 1.15, cellSize * 1.15, 1); // Same size as base floor
+    darkOverlay.position.set(x, y, -0.01); // Above everything else but still behind room elements
+    
+    scene.add(darkOverlay);
+    this.darkOverlays.push(darkOverlay);
+    
+    console.log(`🏃 Marked cell (${gridI},${gridJ}) as visited`);
+  }
+
+  // Method to clear visited cells (for dungeon reset)
+  clearVisitedCells(scene) {
+    this.visitedCells.clear();
+    
+    this.darkOverlays.forEach(overlay => {
+      scene.remove(overlay);
+      if (overlay.material.map) {
+        overlay.material.map.dispose();
+      }
+      overlay.material.dispose();
+    });
+    this.darkOverlays = [];
+    
+    console.log('🧹 Cleared all visited cell markers');
+  }
+
+  // Method to get visited cells count
+  getVisitedCellsCount() {
+    return this.visitedCells.size;
   }
 
   // Method to update floor animations (if needed in the future)
