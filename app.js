@@ -5,6 +5,7 @@ import { PowerUpManager } from './PowerUpManager.js';
 import { SpellEffectManager } from './SpellEffectManager.js';
 import { EnemyManager } from './EnemyManager.js';
 import { FightManager } from './FightManager.js';
+import { DungeonEnvironmentManager } from './DungeonEnvironmentManager.js';
 
 const cellSize = 120;
 let scene, camera, renderer;
@@ -13,6 +14,7 @@ let powerUpManager;
 let spellEffectManager;
 let enemyManager;
 let fightManager;
+let dungeonEnvironmentManager;
 let isAnimating = false;
 let zoomLevel = 1;
 let cameraPosition = { x: 0, y: 0 };
@@ -73,6 +75,13 @@ async function init() {
   createGridLines(dungeonData.input);
   createPrincess(dungeonData.input);
   
+  // Initialize dungeon environment manager FIRST with improved textures
+  dungeonEnvironmentManager = new DungeonEnvironmentManager();
+  await dungeonEnvironmentManager.initialize(scene, cellSize, dungeonData.input);
+  
+  // Generate enhanced environment for all rooms (after manager is initialized)
+  await generateDungeonEnvironments(dungeonData.input);
+  
   // Initialize power-up manager
   powerUpManager = new PowerUpManager();
   await createPowerUps(dungeonData.input);
@@ -100,10 +109,10 @@ async function init() {
   
   // Initialize fight manager
   fightManager = new FightManager(scene, cellSize);
-  
+
   // Connect knight with spell effect manager
   knight.characterController.setSpellEffectManager(spellEffectManager);
-  
+
   // Sync knight's power-up with power-up manager
   const currentPowerUp = powerUpManager.getCurrentPowerUp();
   knight.characterController.setCurrentPowerUp(currentPowerUp);
@@ -120,9 +129,22 @@ async function init() {
 }
 
 function createDungeon(grid) {
-  const materialNeutral = new THREE.MeshBasicMaterial({ color: 0x444444 });
-  const materialPower = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-  const materialThreat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  // Make room backgrounds completely transparent to show environment floor assets
+  const materialNeutral = new THREE.MeshBasicMaterial({ 
+    color: 0x444444, 
+    transparent: true, 
+    opacity: 0.0 // Completely transparent to show floor assets
+  });
+  const materialPower = new THREE.MeshBasicMaterial({ 
+    color: 0x00ff00, 
+    transparent: true, 
+    opacity: 0.0 // Completely transparent to show floor assets
+  });
+  const materialThreat = new THREE.MeshBasicMaterial({ 
+    color: 0xff0000, 
+    transparent: true, 
+    opacity: 0.0 // Completely transparent to show floor assets
+  });
 
   for (let i = 0; i < grid.length; i++) {
     for (let j = 0; j < grid[i].length; j++) {
@@ -132,6 +154,15 @@ function createDungeon(grid) {
       let room = new THREE.Mesh(new THREE.BoxGeometry(cellSize, cellSize, 1), mat);
       room.position.x = j * cellSize - (grid[0].length * cellSize) / 2;
       room.position.y = -i * cellSize + (grid.length * cellSize) / 2;
+      room.position.z = -1.0; // Push room backgrounds well behind environment assets
+      
+      // Store room data for reference
+      room.userData = {
+        roomType: 'background',
+        gridPosition: { i, j },
+        roomValue: val
+      };
+      
       scene.add(room);
     }
   }
@@ -534,7 +565,12 @@ function animatePath() {
 
 function animate() {
   requestAnimationFrame(animate);
-  
+
+  // Update environment animations (torch flickering, etc.)
+  if (dungeonEnvironmentManager) {
+    dungeonEnvironmentManager.updateEnvironments(0.016);
+  }
+
   // Update knight animation if it exists
   if (knight && knight.characterController) {
     if (knight.characterController.mixer) {
@@ -829,4 +865,38 @@ function focusOnKnight() {
   setTimeout(() => {
     button.style.background = '#2196F3';
   }, 200);
+}
+
+/**
+ * Generate enhanced environments for all dungeon rooms
+ * This preserves the original matrix for gameplay while adding visual enhancements
+ */
+async function generateDungeonEnvironments(grid) {
+  console.log('🏰 Generating detailed dungeon environments with proper textures...');
+  
+  if (!dungeonEnvironmentManager) {
+    console.warn('⚠️ Environment manager not initialized');
+    return;
+  }
+  
+  const gridData = {
+    width: grid[0].length,
+    height: grid.length,
+    matrix: grid
+  };
+  
+  // Generate environments for each room
+  for (let i = 0; i < grid.length; i++) {
+    for (let j = 0; j < grid[i].length; j++) {
+      const roomValue = grid[i][j];
+      
+      try {
+        await dungeonEnvironmentManager.generateRoomEnvironment(i, j, roomValue, gridData);
+      } catch (error) {
+        console.error(`❌ Failed to generate environment for room (${i}, ${j}):`, error);
+      }
+    }
+  }
+  
+  console.log('✅ Detailed dungeon environment generation complete!');
 }

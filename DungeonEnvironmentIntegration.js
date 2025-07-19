@@ -138,39 +138,6 @@ export class DungeonWithEnvironments {
   }
 }
 
-// Example usage in your existing app.js:
-/*
-
-// In your main app.js file, replace or enhance your existing dungeon generation:
-
-class App {
-  constructor() {
-    // ... existing code ...
-    this.dungeonWithEnvironments = new DungeonWithEnvironments();
-  }
-
-  async init() {
-    // ... existing initialization code ...
-    
-    // Initialize dungeon with environments
-    await this.dungeonWithEnvironments.initialize(this.scene, this.dungeonGrid);
-    
-    // Generate all room environments
-    await this.dungeonWithEnvironments.generateAllEnvironments();
-  }
-
-  animate() {
-    // ... existing animation code ...
-    
-    // Update environment animations
-    this.dungeonWithEnvironments.updateEnvironments(this.deltaTime);
-    
-    // ... rest of animation loop ...
-  }
-}
-
-*/
-
 // Asset organization helper
 export class AssetOrganizer {
   /**

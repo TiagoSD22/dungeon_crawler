@@ -1,16 +1,25 @@
 /**
  * Dungeon Environment Manager
  * 
- * Generates rich, layered dungeon environments using a comprehensive asset system.
- * Follows a strict layering order and grid-based placement rules for visual coherence.
+ * Generates rich, layered dungeon environments while preserving the original matrix structure.
+ * The original matrix remains intact for knight movement and gameplay mechanics.
+ * Environmental assets are placed around and within rooms without interfering with navigation.
+ * 
+ * Key Design Principles:
+ * - Original matrix positions remain walkable
+ * - Environmental assets enhance visuals without blocking gameplay
+ * - Walls and obstacles are placed in expanded "buffer" areas around the core matrix
+ * - Room interiors get floor decorations and objects that don't block movement
  * 
  * Layer System:
- * - Layer 0: Floor (base tiles, grates, pressure plates)
- * - Layer 1: Walls (boundaries, doors, arches)
- * - Layer 2: Wall-Mounted Objects (torches, bas-reliefs)
- * - Layer 3: Ground Objects (coffins, statues, chests, columns)
+ * - Layer 0: Floor (base tiles, decorative patterns - walkable)
+ * - Layer 1: Walls (placed in buffer zones around matrix)
+ * - Layer 2: Wall-Mounted Objects (torches, decorations)
+ * - Layer 3: Ground Objects (decorative only, don't block paths)
  * - Layer 4: Effects & Overlays (light glows, magical effects)
  */
+
+import * as THREE from 'three';
 
 export class DungeonEnvironmentManager {
   constructor() {
@@ -18,6 +27,9 @@ export class DungeonEnvironmentManager {
     this.cellSize = 80;
     this.tileSize = 32; // Standard tile size for assets
     this.roomEnvironments = new Map(); // Map of room positions to environment data
+    this.originalMatrix = null; // Store the original dungeon matrix
+    this.expandedMatrix = null; // Expanded matrix with buffer zones for walls
+    this.bufferSize = 1; // Buffer cells around original matrix for walls/obstacles
     
     // Asset catalogs
     this.assetCatalogs = {
@@ -37,63 +49,69 @@ export class DungeonEnvironmentManager {
     this.roomThemes = {
       crypt: {
         description: 'A burial chamber filled with ancient tombs',
-        primaryObjects: ['coffins', 'skeletons', 'skulls'],
+        primaryObjects: ['decorative_coffins', 'skull_piles', 'bone_fragments'],
         lighting: ['torches', 'candles'],
         wallDecor: ['scull_bas-relief'],
-        floorSpecial: ['grates'],
+        floorSpecial: ['stone_patterns', 'decorative_grates'],
         mood: 'dark_mystical'
       },
       treasury: {
         description: 'A treasure room with valuables and guardians',
-        primaryObjects: ['chests', 'statues', 'columns'],
+        primaryObjects: ['decorative_chests', 'coin_piles', 'gem_clusters'],
         lighting: ['torches'],
-        wallDecor: ['bas-relief'],
-        floorSpecial: ['plates'],
+        wallDecor: ['ornate_relief'],
+        floorSpecial: ['golden_patterns'],
         mood: 'rich_ornate'
       },
       temple: {
         description: 'A sacred chamber with religious artifacts',
-        primaryObjects: ['statues', 'columns', 'altars'],
-        lighting: ['candles', 'statue_fire'],
-        wallDecor: ['bas-relief'],
-        floorSpecial: ['ritual_plates'],
+        primaryObjects: ['prayer_altars', 'ritual_circles', 'holy_symbols'],
+        lighting: ['candles', 'divine_lights'],
+        wallDecor: ['sacred_relief'],
+        floorSpecial: ['ritual_patterns'],
         mood: 'sacred_mystical'
       },
       prison: {
         description: 'A dungeon cell or holding area',
-        primaryObjects: ['chains', 'skeletons', 'bones'],
-        lighting: ['torches'],
+        primaryObjects: ['chain_remnants', 'old_shackles', 'prisoner_belongings'],
+        lighting: ['dim_torches'],
         wallDecor: ['scull_bas-relief'],
-        floorSpecial: ['grates'],
+        floorSpecial: ['worn_stone', 'water_stains'],
         mood: 'oppressive_dark'
       },
-      library: {
-        description: 'An ancient study or archive',
-        primaryObjects: ['chests', 'statues', 'columns'],
-        lighting: ['candles'],
-        wallDecor: ['bas-relief'],
-        floorSpecial: ['none'],
-        mood: 'scholarly_dim'
+      neutral: {
+        description: 'A standard dungeon corridor or chamber',
+        primaryObjects: ['stone_debris', 'moss_patches', 'weathered_stones'],
+        lighting: ['torches'],
+        wallDecor: ['simple_relief'],
+        floorSpecial: ['basic_patterns'],
+        mood: 'standard_dungeon'
       }
     };
     
     // Layer definitions
     this.layers = {
-      FLOOR: 0,           // Floor tiles, grates, plates
-      WALLS: 1,           // Walls, doors, arches
+      FLOOR: 0,           // Floor tiles, patterns (WALKABLE)
+      WALLS: 1,           // Walls in buffer zones only
       WALL_MOUNTED: 2,    // Wall torches, bas-reliefs
-      GROUND_OBJECTS: 3,  // Coffins, statues, chests
+      GROUND_OBJECTS: 3,  // Decorative objects (non-blocking)
       EFFECTS: 4          // Light glows, magical effects
     };
     
-    console.log('🏰 DungeonEnvironmentManager initialized');
+    console.log('🏰 DungeonEnvironmentManager initialized with matrix preservation');
   }
 
-  async initialize(scene, cellSize = 80) {
+  async initialize(scene, cellSize = 80, originalMatrix = null) {
     this.scene = scene;
     this.cellSize = cellSize;
+    this.originalMatrix = originalMatrix;
     
     console.log('🏰 Initializing dungeon environment manager...');
+    
+    // Create expanded matrix for wall placement if original matrix is provided
+    if (this.originalMatrix) {
+      this.createExpandedMatrix();
+    }
     
     try {
       await this.loadAssetCatalogs();
@@ -103,48 +121,431 @@ export class DungeonEnvironmentManager {
     }
   }
 
+  /**
+   * Create an expanded matrix with buffer zones around the original matrix
+   * This allows placing walls and obstacles without interfering with gameplay
+   */
+  createExpandedMatrix() {
+    const originalHeight = this.originalMatrix.length;
+    const originalWidth = this.originalMatrix[0].length;
+    
+    const expandedHeight = originalHeight + (this.bufferSize * 2);
+    const expandedWidth = originalWidth + (this.bufferSize * 2);
+    
+    // Initialize expanded matrix with walls (value: 'wall')
+    this.expandedMatrix = Array(expandedHeight).fill().map(() => 
+      Array(expandedWidth).fill('wall')
+    );
+    
+    // Copy original matrix to center of expanded matrix
+    for (let i = 0; i < originalHeight; i++) {
+      for (let j = 0; j < originalWidth; j++) {
+        const expandedI = i + this.bufferSize;
+        const expandedJ = j + this.bufferSize;
+        this.expandedMatrix[expandedI][expandedJ] = this.originalMatrix[i][j];
+      }
+    }
+    
+    console.log(`🗺️ Created expanded matrix: ${expandedWidth}x${expandedHeight} (original: ${originalWidth}x${originalHeight})`);
+  }
+
   async loadAssetCatalogs() {
+    console.log('🏰 Loading real dungeon assets from the floors folder...');
+    
     const loader = new THREE.TextureLoader();
     
+    // Define paths to actual asset files
     const assetPaths = {
-      foundational: './assets/environment/walls_floor.png',
-      architectural: './assets/environment/Arches_columns.png',
-      doors: './assets/environment/doors.png',
-      coffins: './assets/environment/coffins.png',
-      objects: './assets/environment/other_objects.png',
-      torches: './assets/environment/torches.png',
-      candles: './assets/environment/candles.png',
-      wallDecor: './assets/environment/scull_bas-relief.png',
-      statuesFire: './assets/environment/Statue_fire.png',
-      plates: './assets/environment/plates.png'
+      floor_base_1: './assets/environment/floors/floor_base_1.png',
+      floor_base_2: './assets/environment/floors/floor_base_2.png',
+      floor_layer_1: './assets/environment/floors/floor_layer_1.png',
+      floor_layer_2: './assets/environment/floors/floor_layer_2.png',
+      plates: './assets/environment/floors/plates.png'
     };
 
-    // Load all asset catalogs
+    // Load floor assets
     const loadPromises = Object.entries(assetPaths).map(([key, path]) => {
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve) => {
         loader.load(
           path,
           (texture) => {
             // Setup texture for pixel art
             texture.magFilter = THREE.NearestFilter;
             texture.minFilter = THREE.NearestFilter;
-            texture.wrapS = THREE.ClampToEdgeWrapping;
-            texture.wrapT = THREE.ClampToEdgeWrapping;
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
             
             this.assetCatalogs[key] = texture;
-            console.log(`📦 Loaded ${key} asset catalog`);
+            console.log(`📦 Loaded ${key} floor asset from ${path}`);
             resolve();
           },
           undefined,
           (error) => {
-            console.warn(`⚠️ Could not load ${key} assets: ${path}`, error);
-            resolve(); // Don't reject, just continue without this asset
+            console.warn(`⚠️ Could not load ${key} from ${path}, creating fallback`);
+            // Create fallback if asset fails to load
+            this.assetCatalogs[key] = this.createFallbackTexture(key);
+            resolve();
           }
         );
       });
     });
 
     await Promise.all(loadPromises);
+    
+    // Create detailed textures for other elements using the canvas approach
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    
+    // Create stone wall texture (like in the reference image)
+    this.assetCatalogs.foundational = this.createStoneWallTexture(ctx);
+    
+    // Create decorative object textures
+    this.assetCatalogs.objects = this.createObjectTexture(ctx);
+    
+    // Create torch textures
+    this.assetCatalogs.torches = this.createTorchTexture(ctx);
+    
+    // Create barrel and chest textures
+    this.assetCatalogs.coffins = this.createContainerTexture(ctx);
+    
+    // Set remaining catalogs to use stone texture as base or floor assets
+    this.assetCatalogs.architectural = this.assetCatalogs.foundational;
+    this.assetCatalogs.doors = this.assetCatalogs.foundational;
+    this.assetCatalogs.candles = this.assetCatalogs.torches;
+    this.assetCatalogs.wallDecor = this.assetCatalogs.foundational;
+    this.assetCatalogs.statuesFire = this.assetCatalogs.objects;
+    
+    console.log('✅ All dungeon assets loaded successfully');
+  }
+
+  createFallbackTexture(assetKey) {
+    // Create fallback textures if real assets fail to load
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    
+    switch(assetKey) {
+      case 'floor_base_1':
+        ctx.fillStyle = '#5a5a5a';
+        ctx.fillRect(0, 0, 64, 64);
+        break;
+      case 'floor_base_2':
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(0, 0, 64, 64);
+        break;
+      case 'floor_layer_1':
+        ctx.fillStyle = '#6a6a6a';
+        ctx.fillRect(0, 0, 64, 64);
+        break;
+      case 'floor_layer_2':
+        ctx.fillStyle = '#7a7a7a';
+        ctx.fillRect(0, 0, 64, 64);
+        break;
+      case 'plates':
+        ctx.fillStyle = '#8a8a8a';
+        ctx.fillRect(0, 0, 64, 64);
+        break;
+    }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  }
+
+  createStoneWallTexture(ctx) {
+    const canvas = ctx.canvas;
+    ctx.clearRect(0, 0, 512, 512);
+    
+    // Base stone color (darker gray like in reference)
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(0, 0, 512, 512);
+    
+    // Draw stone brick pattern
+    const brickWidth = 64;
+    const brickHeight = 32;
+    
+    for (let y = 0; y < 512; y += brickHeight) {
+      for (let x = 0; x < 512; x += brickWidth) {
+        // Alternate brick offset for realistic pattern
+        const offsetX = (y / brickHeight) % 2 === 0 ? 0 : brickWidth / 2;
+        const drawX = (x + offsetX) % 512;
+        
+        // Draw brick outline
+        ctx.strokeStyle = '#2a2a2a';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(drawX, y, brickWidth, brickHeight);
+        
+        // Add highlight to make bricks look 3D
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(drawX + 2, y + 2, brickWidth - 4, 6);
+        ctx.fillRect(drawX + 2, y + 2, 6, brickHeight - 4);
+        
+        // Add shadow for depth
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(drawX + brickWidth - 8, y + 8, 6, brickHeight - 8);
+        ctx.fillRect(drawX + 8, y + brickHeight - 8, brickWidth - 8, 6);
+      }
+    }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  }
+
+  createObjectTexture(ctx) {
+    const canvas = ctx.canvas;
+    ctx.clearRect(0, 0, 512, 512);
+    
+    // Draw barrels (like in reference image)
+    this.drawBarrel(ctx, 64, 64, 48);
+    this.drawBarrel(ctx, 192, 64, 48);
+    
+    // Draw chests
+    this.drawChest(ctx, 320, 64, 48);
+    
+    // Draw skulls and bones
+    this.drawSkull(ctx, 64, 192, 32);
+    this.drawBones(ctx, 192, 192, 32);
+    
+    // Draw stone debris
+    this.drawStoneDebris(ctx, 320, 192, 32);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    return texture;
+  }
+
+  drawBarrel(ctx, x, y, size) {
+    // Barrel body (brown wood)
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(x, y + size * 0.1, size, size * 0.8);
+    
+    // Barrel hoops (metal bands)
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(x, y + size * 0.2, size, 4);
+    ctx.fillRect(x, y + size * 0.7, size, 4);
+    
+    // Barrel highlight
+    ctx.fillStyle = '#cd853f';
+    ctx.fillRect(x + 2, y + size * 0.1, 6, size * 0.8);
+    
+    // Barrel top
+    ctx.fillStyle = '#654321';
+    ctx.beginPath();
+    ctx.ellipse(x + size/2, y + size * 0.1, size/2, size * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawChest(ctx, x, y, size) {
+    // Chest body (dark wood)
+    ctx.fillStyle = '#4a3c28';
+    ctx.fillRect(x, y + size * 0.3, size, size * 0.7);
+    
+    // Chest lid
+    ctx.fillStyle = '#5a4c38';
+    ctx.fillRect(x, y, size, size * 0.4);
+    
+    // Metal reinforcements
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(x + size * 0.1, y + size * 0.4, size * 0.8, 3);
+    ctx.fillRect(x + size * 0.4, y + size * 0.1, 3, size * 0.3);
+    
+    // Lock
+    ctx.fillStyle = '#FFD700';
+    ctx.beginPath();
+    ctx.arc(x + size * 0.7, y + size * 0.6, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawSkull(ctx, x, y, size) {
+    // Skull (bone white)
+    ctx.fillStyle = '#f5f5dc';
+    ctx.beginPath();
+    ctx.arc(x + size/2, y + size * 0.4, size * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Eye sockets
+    ctx.fillStyle = '#2a2a2a';
+    ctx.beginPath();
+    ctx.arc(x + size * 0.35, y + size * 0.35, size * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + size * 0.65, y + size * 0.35, size * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Nasal cavity
+    ctx.beginPath();
+    ctx.moveTo(x + size * 0.5, y + size * 0.45);
+    ctx.lineTo(x + size * 0.45, y + size * 0.55);
+    ctx.lineTo(x + size * 0.55, y + size * 0.55);
+    ctx.fill();
+  }
+
+  drawBones(ctx, x, y, size) {
+    ctx.fillStyle = '#f5f5dc';
+    
+    // Draw crossed bones
+    ctx.save();
+    ctx.translate(x + size/2, y + size/2);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillRect(-size * 0.4, -2, size * 0.8, 4);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillRect(-size * 0.4, -2, size * 0.8, 4);
+    ctx.restore();
+    
+    // Bone ends
+    ctx.beginPath();
+    ctx.arc(x + size * 0.2, y + size * 0.2, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + size * 0.8, y + size * 0.8, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawStoneDebris(ctx, x, y, size) {
+    ctx.fillStyle = '#696969';
+    
+    // Draw random stone chunks
+    for (let i = 0; i < 5; i++) {
+      const stoneX = x + Math.random() * size;
+      const stoneY = y + Math.random() * size;
+      const stoneSize = 4 + Math.random() * 8;
+      
+      ctx.beginPath();
+      ctx.arc(stoneX, stoneY, stoneSize, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  createTorchTexture(ctx) {
+    const canvas = ctx.canvas;
+    ctx.clearRect(0, 0, 512, 512);
+    
+    // Draw torch handle (wood)
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(64 + 12, 64, 8, 48);
+    
+    // Draw torch flame (animated frames)
+    this.drawFlame(ctx, 64 + 8, 64 - 16, 16, 20, '#ff4500'); // Frame 0
+    this.drawFlame(ctx, 192 + 8, 64 - 16, 16, 22, '#ff6500'); // Frame 1
+    this.drawFlame(ctx, 320 + 8, 64 - 16, 16, 18, '#ff8500'); // Frame 2
+    this.drawFlame(ctx, 64 + 8, 192 - 16, 16, 24, '#ffa500'); // Frame 3
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    return texture;
+  }
+
+  drawFlame(ctx, x, y, width, height, color) {
+    const gradient = ctx.createLinearGradient(x, y + height, x, y);
+    gradient.addColorStop(0, color);
+    gradient.addColorStop(0.5, '#ffff00');
+    gradient.addColorStop(1, '#ffffff');
+    
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(x + width/2, y);
+    ctx.quadraticCurveTo(x + width, y + height/2, x + width * 0.8, y + height);
+    ctx.lineTo(x + width * 0.2, y + height);
+    ctx.quadraticCurveTo(x, y + height/2, x + width/2, y);
+    ctx.fill();
+  }
+
+  createContainerTexture(ctx) {
+    const canvas = ctx.canvas;
+    ctx.clearRect(0, 0, 512, 512);
+    
+    // Draw various containers (barrels, chests, coffins)
+    this.drawBarrel(ctx, 64, 64, 56);
+    this.drawChest(ctx, 192, 64, 56);
+    this.drawCoffin(ctx, 320, 64, 56);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    return texture;
+  }
+
+  drawCoffin(ctx, x, y, size) {
+    // Coffin body (dark wood)
+    ctx.fillStyle = '#2F2F2F';
+    ctx.fillRect(x, y + size * 0.2, size, size * 0.8);
+    
+    // Coffin lid (slightly lighter)
+    ctx.fillStyle = '#4F4F4F';
+    ctx.fillRect(x + size * 0.1, y, size * 0.8, size * 0.3);
+    
+    // Metal handles
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(x + size * 0.2, y + size * 0.5, 6, 3);
+    ctx.fillRect(x + size * 0.7, y + size * 0.5, 6, 3);
+    
+    // Cross decoration
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(x + size * 0.45, y + size * 0.6, 4, 16);
+    ctx.fillRect(x + size * 0.35, y + size * 0.66, 16, 4);
+  }
+
+  createFloorTileTexture(ctx) {
+    const canvas = ctx.canvas;
+    ctx.clearRect(0, 0, 512, 512);
+    
+    // Base floor color (stone gray)
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(0, 0, 512, 512);
+    
+    // Draw stone tile pattern
+    const tileSize = 64;
+    for (let y = 0; y < 512; y += tileSize) {
+      for (let x = 0; x < 512; x += tileSize) {
+        // Tile outline
+        ctx.strokeStyle = '#4a4a4a';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, tileSize, tileSize);
+        
+        // Tile highlights
+        ctx.fillStyle = '#6a6a6a';
+        ctx.fillRect(x + 2, y + 2, tileSize - 4, 4);
+        ctx.fillRect(x + 2, y + 2, 4, tileSize - 4);
+        
+        // Worn areas
+        if (Math.random() > 0.7) {
+          ctx.fillStyle = '#4a4a4a';
+          ctx.beginPath();
+          ctx.arc(x + tileSize/2, y + tileSize/2, Math.random() * 8 + 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  }
+
+  lightenColor(color, percent) {
+    const num = parseInt(color.replace("#", ""), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = (num >> 16) + amt;
+    const G = (num >> 8 & 0x00FF) + amt;
+    const B = (num & 0x0000FF) + amt;
+    return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+      (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+      (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
   }
 
   /**
@@ -155,13 +556,12 @@ export class DungeonEnvironmentManager {
    * @param {object} gridData - Grid information
    */
   async generateRoomEnvironment(roomI, roomJ, roomValue, gridData) {
-    // Only generate environments for rooms (negative values are threats, positive could be special rooms)
-    if (roomValue === 0) return; // Skip empty spaces
-    
+    // Generate environments for ALL rooms (including corridors with value 0)
     const roomKey = `${roomI},${roomJ}`;
     
     // Don't regenerate if already exists
     if (this.roomEnvironments.has(roomKey)) {
+      console.log(`♻️ Environment already exists for room [${roomI},${roomJ}]`);
       return this.roomEnvironments.get(roomKey);
     }
 
@@ -169,12 +569,15 @@ export class DungeonEnvironmentManager {
 
     // Determine room theme based on room value and position
     const theme = this.determineRoomTheme(roomI, roomJ, roomValue);
+    console.log(`🎨 Selected theme: ${theme} for room [${roomI},${roomJ}]`);
     
     // Generate room layout
     const roomLayout = this.generateRoomLayout(roomI, roomJ, theme, gridData);
+    console.log(`🗺️ Generated layout with ${Object.values(roomLayout.layers).flat().length} total objects`);
     
     // Create 3D objects for the room
     const environmentObjects = await this.createEnvironmentObjects(roomLayout, roomI, roomJ);
+    console.log(`🎯 Created ${environmentObjects.length} 3D objects for room [${roomI},${roomJ}]`);
     
     // Store environment data
     const environmentData = {
@@ -186,7 +589,7 @@ export class DungeonEnvironmentManager {
     
     this.roomEnvironments.set(roomKey, environmentData);
     
-    console.log(`✅ Generated ${theme} environment for room [${roomI},${roomJ}]`);
+    console.log(`✅ Generated ${theme} environment for room [${roomI},${roomJ}] - ${environmentObjects.length} objects created`);
     return environmentData;
   }
 
@@ -252,43 +655,71 @@ export class DungeonEnvironmentManager {
    * Generate floor layer with base tiles and special floor elements
    */
   generateFloorLayer(layout, theme) {
-    const { width, height } = layout.size;
+    // Randomly choose base floor (floor_base1 or floor_base2)
+    const baseFloorAsset = Math.random() > 0.5 ? 'floor_base_1' : 'floor_base_2';
     
-    // Fill with basic floor tiles
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
+    // Create base floor that covers the entire room
+    layout.layers[this.layers.FLOOR].push({
+      type: 'base_floor',
+      position: { x: 0, y: 0 },
+      asset: baseFloorAsset,
+      frame: 0,
+      fullRoom: true,
+      priority: 0 // Base layer has lowest priority
+    });
+
+    // Randomly add floor layer (30% chance)
+    if (Math.random() > 0.7) {
+      const layerAsset = Math.random() > 0.5 ? 'floor_layer_1' : 'floor_layer_2';
+      layout.layers[this.layers.FLOOR].push({
+        type: 'floor_layer',
+        position: { x: 0, y: 0 },
+        asset: layerAsset,
+        frame: 0,
+        fullRoom: true,
+        priority: 1, // Layer goes on top of base
+        opacity: 0.7 // Make it semi-transparent to blend with base
+      });
+    }
+
+    // Randomly place plates (40% chance per room)
+    if (Math.random() > 0.6) {
+      const plateCount = Math.floor(Math.random() * 3) + 1; // 1-3 plates
+      
+      for (let i = 0; i < plateCount; i++) {
+        // Random positions for plates
+        const platePositions = [
+          { x: -0.3, y: -0.3 },
+          { x: 0.3, y: -0.3 },
+          { x: -0.3, y: 0.3 },
+          { x: 0.3, y: 0.3 },
+          { x: 0, y: 0 }
+        ];
+        
+        const position = platePositions[i % platePositions.length];
+        
         layout.layers[this.layers.FLOOR].push({
-          type: 'floor_tile',
-          position: { x, y },
-          asset: 'foundational',
-          frame: 0 // Base floor tile frame
+          type: 'floor_plate',
+          position: position,
+          asset: 'plates',
+          frame: Math.floor(Math.random() * 4), // Random plate variant (assuming 4 variants in sprite sheet)
+          fullRoom: false,
+          priority: 2, // Plates go on top of layers
+          size: 'small'
         });
       }
     }
 
-    // Add special floor elements based on theme
-    if (theme.floorSpecial.includes('grates')) {
-      // Add some floor grates
-      const gratePositions = this.selectRandomPositions(layout.size, 2);
-      gratePositions.forEach(pos => {
-        layout.layers[this.layers.FLOOR].push({
-          type: 'floor_grate',
-          position: pos,
-          asset: 'foundational',
-          frame: 5 // Grate frame index
-        });
-      });
-    }
-
-    if (theme.floorSpecial.includes('plates')) {
-      // Add pressure plates or ritual circles
-      const platePos = this.getCenterPosition(layout.size);
+    // Add themed floor decorations based on room type
+    if (theme.floorSpecial.includes('ritual_patterns') || theme.mood === 'sacred_mystical') {
       layout.layers[this.layers.FLOOR].push({
-        type: 'floor_plate',
-        position: platePos,
-        asset: 'plates',
-        frame: 0, // 5x5 pattern
-        size: { width: 3, height: 3 }
+        type: 'ritual_circle',
+        position: { x: 0, y: 0 },
+        asset: 'floor_layer_1', // Use layer asset for ritual patterns
+        frame: 0,
+        fullRoom: false,
+        priority: 3,
+        opacity: 0.8
       });
     }
   }
@@ -344,24 +775,80 @@ export class DungeonEnvironmentManager {
    * Place ground objects based on theme
    */
   placeGroundObjects(layout, theme) {
-    const objectCount = Math.floor(Math.random() * 4) + 2; // 2-5 objects
-    const availablePositions = this.getAvailableFloorPositions(layout);
+    // Add more objects for rich dungeon atmosphere (like reference image)
+    const objectCount = Math.floor(Math.random() * 4) + 3; // 3-6 objects per room
     
-    for (let i = 0; i < Math.min(objectCount, availablePositions.length); i++) {
-      const position = availablePositions[Math.floor(Math.random() * availablePositions.length)];
+    // Add themed decorative objects
+    for (let i = 0; i < objectCount; i++) {
       const objectType = this.selectRandomThemeObject(theme.primaryObjects);
+      
+      // Position objects with varied placement around the room
+      const placementPatterns = [
+        { x: -0.3, y: -0.3 }, // Top-left area
+        { x: 0.3, y: -0.3 },  // Top-right area
+        { x: -0.3, y: 0.3 },  // Bottom-left area
+        { x: 0.3, y: 0.3 },   // Bottom-right area
+        { x: 0, y: -0.4 },    // Top center
+        { x: 0, y: 0.4 },     // Bottom center
+        { x: -0.4, y: 0 },    // Left center
+        { x: 0.4, y: 0 }      // Right center
+      ];
+      
+      const position = placementPatterns[i % placementPatterns.length];
       
       layout.layers[this.layers.GROUND_OBJECTS].push({
         type: objectType,
-        position,
+        position: position,
         asset: this.getAssetForObjectType(objectType),
         frame: this.getFrameForObjectType(objectType),
-        animated: this.isObjectAnimated(objectType)
+        animated: this.isObjectAnimated(objectType),
+        size: 'medium'
       });
+    }
 
-      // Remove used position
-      const index = availablePositions.indexOf(position);
-      if (index > -1) availablePositions.splice(index, 1);
+    // Always add at least one torch per room for lighting (like reference)
+    layout.layers[this.layers.GROUND_OBJECTS].push({
+      type: 'torches',
+      position: { x: -0.35, y: -0.35 }, // Corner torch
+      asset: 'torches',
+      frame: 0,
+      animated: true,
+      size: 'medium'
+    });
+
+    // Add containers based on room type
+    if (theme.primaryObjects.includes('decorative_chests')) {
+      layout.layers[this.layers.GROUND_OBJECTS].push({
+        type: 'decorative_chests',
+        position: { x: 0.25, y: 0.25 },
+        asset: 'coffins',
+        frame: 1, // Chest frame
+        animated: false,
+        size: 'large'
+      });
+    }
+
+    if (theme.primaryObjects.includes('decorative_coffins')) {
+      layout.layers[this.layers.GROUND_OBJECTS].push({
+        type: 'decorative_coffins',
+        position: { x: 0, y: 0.2 },
+        asset: 'coffins',
+        frame: 2, // Coffin frame
+        animated: false,
+        size: 'large'
+      });
+    }
+
+    // Add barrels for atmosphere
+    if (Math.random() > 0.5) {
+      layout.layers[this.layers.GROUND_OBJECTS].push({
+        type: 'barrel',
+        position: { x: 0.3, y: -0.25 },
+        asset: 'objects',
+        frame: 0, // Barrel frame
+        animated: false,
+        size: 'medium'
+      });
     }
   }
 
@@ -392,20 +879,21 @@ export class DungeonEnvironmentManager {
    * Add lighting effects
    */
   addLightingEffects(layout, theme) {
+    // Add simple glow effects for lighting objects instead of complex assets
     const lightingObjects = layout.layers[this.layers.GROUND_OBJECTS]
-      .concat(layout.layers[this.layers.WALL_MOUNTED])
       .filter(obj => theme.lighting.includes(obj.type) || obj.type.includes('torch') || obj.type.includes('candle'));
 
     lightingObjects.forEach(lightSource => {
-      // Add glow effect for each light source
+      // Add glow effect for each light source using foundational assets
       layout.layers[this.layers.EFFECTS].push({
         type: 'light_glow',
         position: lightSource.position,
-        asset: 'effects',
+        asset: 'foundational', // Use existing asset catalog
         frame: 0,
         animated: true,
-        glowColor: 0x00ffff, // Cyan glow as specified
-        intensity: 0.8
+        glowColor: 0xFFAA00, // Warm glow color
+        intensity: 0.8,
+        size: 'large'
       });
     });
   }
@@ -445,11 +933,41 @@ export class DungeonEnvironmentManager {
       return null;
     }
 
-    const geometry = new THREE.PlaneGeometry(this.tileSize, this.tileSize);
+    // Make environment objects properly sized based on type
+    let objectSize;
+    if (objData.type === 'base_floor' && objData.fullRoom) {
+      // Base floor should completely cover the room
+      objectSize = this.cellSize * 0.98;
+    } else if (objData.type === 'floor_layer' && objData.fullRoom) {
+      // Floor layer should also cover the room but be slightly smaller to show base
+      objectSize = this.cellSize * 0.96;
+    } else if (objData.type === 'floor_plate') {
+      // Plates are small decorative elements
+      objectSize = this.cellSize * 0.15;
+    } else if (objData.type === 'wall') {
+      // Walls should be thick and prominent
+      objectSize = this.cellSize * 0.9;
+    } else if (objData.size === 'large') {
+      // Large objects like chests, coffins
+      objectSize = this.cellSize * 0.35;
+    } else if (objData.size === 'medium') {
+      // Medium objects like barrels, torches
+      objectSize = this.cellSize * 0.25;
+    } else if (objData.size === 'small') {
+      // Small decorative objects
+      objectSize = this.cellSize * 0.15;
+    } else {
+      // Default size
+      objectSize = this.cellSize * 0.2;
+    }
+    
+    const geometry = new THREE.PlaneGeometry(objectSize, objectSize);
+    
     const material = new THREE.MeshBasicMaterial({
-      map: this.assetCatalogs[objData.asset].clone(),
+      map: this.getAssetTexture(objData.asset, objData.frame || 0),
       transparent: true,
-      alphaTest: 0.1
+      alphaTest: 0.1,
+      opacity: objData.opacity || 1.0
     });
 
     // Set up UV mapping for the specific frame
@@ -457,24 +975,48 @@ export class DungeonEnvironmentManager {
 
     const mesh = new THREE.Mesh(geometry, material);
 
-    // Position the object
-    const tileOffsetX = (objData.position.x - 2) * this.tileSize; // Center in 5x5 grid
-    const tileOffsetY = (objData.position.y - 2) * this.tileSize;
+    // Position the object with proper layering
+    let finalX = roomCenterX;
+    let finalY = roomCenterY;
+    let finalZ = 0.5; // Higher base height to ensure visibility above room backgrounds
     
-    mesh.position.set(
-      roomCenterX + tileOffsetX,
-      roomCenterY - tileOffsetY,
-      layer * 0.1 // Layer separation for proper rendering order
-    );
+    // Set height based on priority for proper layering
+    if (objData.priority !== undefined) {
+      finalZ = 0.5 + (objData.priority * 0.1); // Each priority level adds 0.1 units (more separation)
+    } else {
+      finalZ = layer * 0.2 + 1.0; // Legacy layer system with higher positioning
+    }
+    
+    if (objData.type === 'base_floor' || objData.type === 'floor_layer' || objData.type === 'floor_plate') {
+      // Floor objects positioned exactly at room center or with offset
+      if (objData.position && (objData.position.x !== 0 || objData.position.y !== 0)) {
+        finalX += objData.position.x * this.cellSize * 0.35;
+        finalY += objData.position.y * this.cellSize * 0.35;
+      }
+    } else if (objData.position && (objData.position.x !== undefined && objData.position.y !== undefined)) {
+      // Handle relative positioning for other decorative objects
+      if (Math.abs(objData.position.x) <= 1 && Math.abs(objData.position.y) <= 1) {
+        // Relative positioning (values between -1 and 1)
+        finalX += objData.position.x * this.cellSize * 0.35;
+        finalY += objData.position.y * this.cellSize * 0.35;
+        finalZ = 1.0 + (layer * 0.2); // Higher stacking for decorative objects
+      }
+    }
+    
+    mesh.position.set(finalX, finalY, finalZ);
 
     // Store object data for animation and interaction
     mesh.userData = {
       environmentObject: true,
       objData,
       layer,
-      animated: objData.animated || false
+      animated: objData.animated || false,
+      roomPosition: { i: Math.floor((roomCenterY + (this.scene.userData.gridHeight * this.cellSize) / 2) / this.cellSize), 
+                     j: Math.floor((roomCenterX + (this.scene.userData.gridWidth * this.cellSize) / 2) / this.cellSize) }
     };
 
+    console.log(`🎨 Created ${objData.type} object at position (${mesh.position.x.toFixed(1)}, ${mesh.position.y.toFixed(1)}, ${mesh.position.z.toFixed(1)})`);
+    
     return mesh;
   }
 
@@ -482,18 +1024,47 @@ export class DungeonEnvironmentManager {
    * Set up UV mapping for a specific frame in an asset sheet
    */
   setupUVMapping(texture, frameIndex, assetType) {
-    // This would need to be customized based on your actual sprite sheet layouts
-    // For now, assuming a standard grid layout
-    const framesPerRow = 8; // Adjust based on actual sprite sheets
-    const frameWidth = 1 / framesPerRow;
-    const frameHeight = 1 / framesPerRow;
-
-    const col = frameIndex % framesPerRow;
-    const row = Math.floor(frameIndex / framesPerRow);
-
-    texture.offset.set(col * frameWidth, 1 - (row + 1) * frameHeight);
-    texture.repeat.set(frameWidth, frameHeight);
+    // Handle different frame layouts for different asset types
+    if (assetType === 'torches' && frameIndex > 0) {
+      // Animated torch frames are laid out horizontally
+      const frameWidth = 1 / 4; // 4 animation frames
+      texture.offset.set(frameIndex * frameWidth, 0);
+      texture.repeat.set(frameWidth, 1);
+    } else if (assetType === 'objects' || assetType === 'coffins') {
+      // Object frames are laid out in a grid
+      const framesPerRow = 3;
+      const frameWidth = 1 / framesPerRow;
+      const frameHeight = 1 / 2; // 2 rows
+      
+      const col = frameIndex % framesPerRow;
+      const row = Math.floor(frameIndex / framesPerRow);
+      
+      texture.offset.set(col * frameWidth, row * frameHeight);
+      texture.repeat.set(frameWidth, frameHeight);
+    } else {
+      // Default: use full texture
+      texture.offset.set(0, 0);
+      texture.repeat.set(1, 1);
+    }
+    
     texture.needsUpdate = true;
+  }
+
+  /**
+   * Get texture for a specific asset
+   */
+  getAssetTexture(assetKey, frame = 0) {
+    console.log(`🔍 Looking for asset key: '${assetKey}'`);
+    console.log(`📚 Available asset catalogs:`, Object.keys(this.assetCatalogs));
+    
+    if (this.assetCatalogs[assetKey]) {
+      console.log(`✅ Found asset '${assetKey}', creating clone`);
+      return this.assetCatalogs[assetKey].clone();
+    }
+    
+    console.warn(`⚠️ Asset '${assetKey}' not found in catalogs`);
+    // Return a fallback texture
+    return this.createFallbackTexture(assetKey);
   }
 
   // Utility methods
@@ -562,38 +1133,58 @@ export class DungeonEnvironmentManager {
 
   getAssetForObjectType(objectType) {
     const assetMap = {
-      'coffins': 'coffins',
-      'skeletons': 'objects',
-      'skulls': 'objects',
-      'chests': 'objects',
-      'statues': 'objects',
-      'columns': 'architectural',
+      // Map object types to available asset catalogs
+      'decorative_coffins': 'coffins',
+      'skull_piles': 'objects',
+      'bone_fragments': 'objects',
+      'decorative_chests': 'objects',
+      'coin_piles': 'objects',
+      'gem_clusters': 'objects',
+      'prayer_altars': 'architectural',
+      'ritual_circles': 'plates',
+      'holy_symbols': 'objects',
+      'chain_remnants': 'objects',
+      'old_shackles': 'objects',
+      'prisoner_belongings': 'objects',
+      'stone_debris': 'foundational',
+      'moss_patches': 'foundational',
+      'weathered_stones': 'foundational',
       'torches': 'torches',
-      'candles': 'candles'
+      'candles': 'candles',
+      'dim_torches': 'torches'
     };
     
-    return assetMap[objectType] || 'objects';
+    return assetMap[objectType] || 'foundational'; // Fallback to foundational
   }
 
   getFrameForObjectType(objectType) {
     // Return appropriate frame index for each object type
-    // This would need to be mapped to your actual sprite sheets
     const frameMap = {
-      'coffins': 0,
-      'skeletons': 10,
-      'skulls': 15,
-      'chests': 5,
-      'statues': 20,
-      'columns': 0,
+      'decorative_coffins': 0,
+      'skull_piles': 1,
+      'bone_fragments': 2,
+      'decorative_chests': 0,
+      'coin_piles': 1,
+      'gem_clusters': 2,
+      'prayer_altars': 0,
+      'ritual_circles': 0,
+      'holy_symbols': 1,
+      'chain_remnants': 0,
+      'old_shackles': 1,
+      'prisoner_belongings': 2,
+      'stone_debris': 0,
+      'moss_patches': 1,
+      'weathered_stones': 2,
       'torches': 0,
-      'candles': 0
+      'candles': 0,
+      'dim_torches': 0
     };
     
     return frameMap[objectType] || 0;
   }
 
   isObjectAnimated(objectType) {
-    const animatedObjects = ['torches', 'candles', 'statue_fire', 'scull_bas-relief'];
+    const animatedObjects = ['torches', 'candles', 'dim_torches', 'light_glow'];
     return animatedObjects.includes(objectType);
   }
 
@@ -631,7 +1222,6 @@ export class DungeonEnvironmentManager {
 
   updateObjectAnimation(object3D, objData, deltaTime) {
     // Handle animation frame updates for torches, candles, etc.
-    // This would cycle through animation frames for flickering effects
     if (!object3D.userData.animationTime) {
       object3D.userData.animationTime = 0;
       object3D.userData.currentFrame = 0;
@@ -639,8 +1229,15 @@ export class DungeonEnvironmentManager {
 
     object3D.userData.animationTime += deltaTime;
     
-    if (object3D.userData.animationTime >= 0.2) { // 200ms per frame
-      object3D.userData.currentFrame = (object3D.userData.currentFrame + 1) % 4; // Assume 4 frames
+    // Torch animation (4 frames, faster flicker)
+    if (objData.type === 'torches' && object3D.userData.animationTime >= 0.15) {
+      object3D.userData.currentFrame = (object3D.userData.currentFrame + 1) % 4;
+      this.setupUVMapping(object3D.material.map, object3D.userData.currentFrame, objData.asset);
+      object3D.userData.animationTime = 0;
+    }
+    // Other animated objects (slower animation)
+    else if (object3D.userData.animationTime >= 0.3) {
+      object3D.userData.currentFrame = (object3D.userData.currentFrame + 1) % 2;
       this.setupUVMapping(object3D.material.map, object3D.userData.currentFrame, objData.asset);
       object3D.userData.animationTime = 0;
     }
