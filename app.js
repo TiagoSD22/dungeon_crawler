@@ -8,7 +8,17 @@ import { FightManager } from './FightManager.js';
 import { EnvironmentManager } from './EnvironmentManager.js';
 
 const cellSize = 120;
+const WATER_ROWS_OFFSET = 6; // Number of water rows added above the original dungeon
 let scene, camera, renderer;
+
+// Helper function to convert original grid coordinates to expanded grid coordinates
+function getExpandedPosition(originalI, originalJ, originalGridWidth, expandedGridHeight) {
+  const expandedI = originalI + WATER_ROWS_OFFSET; // Add offset for water rows
+  const x = originalJ * cellSize - (originalGridWidth * cellSize) / 2;
+  const y = -expandedI * cellSize + (expandedGridHeight * cellSize) / 2;
+  return { x, y, expandedI };
+}
+
 let knight, princess;
 let powerUpManager;
 let spellEffectManager;
@@ -46,14 +56,14 @@ async function init() {
   fillLight.position.set(-100, -100, 100);
   scene.add(fillLight);
 
-  // Calculate dungeon dimensions for proper camera setup
+  // Calculate dungeon dimensions for proper camera setup (including water rows)
   const dungeonWidth = dungeonData.input[0].length * cellSize;
-  const dungeonHeight = dungeonData.input.length * cellSize;
-  const maxDimension = Math.max(dungeonWidth, dungeonHeight);
+  const expandedDungeonHeight = (dungeonData.input.length + WATER_ROWS_OFFSET) * cellSize;
+  const maxDimension = Math.max(dungeonWidth, expandedDungeonHeight);
   
   // Set up orthographic camera with proper bounds
   const aspect = window.innerWidth / window.innerHeight;
-  const cameraSize = maxDimension * 0.8; // Add some padding
+  const cameraSize = maxDimension * 1.2; // Increase padding to zoom out more and show expanded dungeon
   
   camera = new THREE.OrthographicCamera(
     -cameraSize * aspect / 2, cameraSize * aspect / 2,
@@ -88,9 +98,9 @@ async function init() {
   enemyManager = new EnemyManager();
   await enemyManager.initialize(scene);
   
-  // Store grid dimensions for enemy positioning
+  // Store grid dimensions for enemy positioning (use expanded dimensions)
   scene.userData.gridWidth = dungeonData.input[0].length;
-  scene.userData.gridHeight = dungeonData.input.length;
+  scene.userData.gridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
   
   await createEnemies(dungeonData.input);
   
@@ -127,18 +137,29 @@ async function init() {
 }
 
 function createDungeon(grid) {
+  // Get expanded matrix from environment manager
+  const expandedGrid = environmentManager ? environmentManager.getExpandedMatrix(grid) : grid;
+  
   const materialNeutral = new THREE.MeshBasicMaterial({ color: 0x444444, opacity: 0.0, transparent: true });
   const materialPower = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.0, transparent: true });
   const materialThreat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.0, transparent: true });
+  const materialWater = new THREE.MeshBasicMaterial({ color: 0x0066cc, opacity: 0.0, transparent: true });
 
-  for (let i = 0; i < grid.length; i++) {
-    for (let j = 0; j < grid[i].length; j++) {
-      let val = grid[i][j];
-      let mat = val === 0 ? materialNeutral : val > 0 ? materialPower : materialThreat;
+  for (let i = 0; i < expandedGrid.length; i++) {
+    for (let j = 0; j < expandedGrid[i].length; j++) {
+      let val = expandedGrid[i][j];
+      let mat;
+      
+      // Handle different room types
+      if (val === -999) {
+        mat = materialWater; // Water environment
+      } else {
+        mat = val === 0 ? materialNeutral : val > 0 ? materialPower : materialThreat;
+      }
 
       let room = new THREE.Mesh(new THREE.BoxGeometry(cellSize, cellSize, 1), mat);
-      room.position.x = j * cellSize - (grid[0].length * cellSize) / 2;
-      room.position.y = -i * cellSize + (grid.length * cellSize) / 2;
+      room.position.x = j * cellSize - (expandedGrid[0].length * cellSize) / 2;
+      room.position.y = -i * cellSize + (expandedGrid.length * cellSize) / 2;
       scene.add(room);
     }
   }
@@ -147,11 +168,15 @@ function createDungeon(grid) {
 async function createPowerUps(grid) {
   console.log('🔮 Creating power-ups for power rooms...');
   
+  const expandedGridHeight = grid.length + WATER_ROWS_OFFSET;
+  
   for (let i = 0; i < grid.length; i++) {
     for (let j = 0; j < grid[i].length; j++) {
       const roomValue = grid[i][j];
       if (roomValue > 0) {
-        await powerUpManager.createPowerUpForRoom(i, j, roomValue, cellSize, scene, grid[0].length, grid.length);
+        // Use expanded coordinates for power-up positioning
+        const expandedI = i + WATER_ROWS_OFFSET;
+        await powerUpManager.createPowerUpForRoom(expandedI, j, roomValue, cellSize, scene, grid[0].length, expandedGridHeight);
       }
     }
   }
@@ -162,22 +187,24 @@ async function createPowerUps(grid) {
 async function createEnemies(grid) {
   console.log('👻 Creating enemies for threat rooms...');
   
+  const expandedGridHeight = grid.length + WATER_ROWS_OFFSET;
+  
   for (let i = 0; i < grid.length; i++) {
     for (let j = 0; j < grid[i].length; j++) {
       const roomValue = grid[i][j];
       if (roomValue < 0) {
-        await enemyManager.createEnemyForRoom(i, j, roomValue, cellSize, scene, grid[0].length, grid.length);
+        // Use expanded coordinates for enemy positioning
+        const expandedI = i + WATER_ROWS_OFFSET;
+        await enemyManager.createEnemyForRoom(expandedI, j, roomValue, cellSize, scene, grid[0].length, expandedGridHeight);
       }
     }
   }
-  
+
   // Log enemy distribution
   const enemyStats = enemyManager.getEnemyCountByType();
   console.log('✅ Enemies created successfully!');
   console.log('📊 Enemy Distribution:', enemyStats);
-}
-
-function createGridLines(grid) {
+}function createGridLines(grid) {
   const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.3, transparent: true });
   
   // Horizontal lines
@@ -212,8 +239,12 @@ function createPrincess(grid) {
     new THREE.MeshBasicMaterial({ color: 0xff69b4 })
   );
   
-  princess.position.x = j * cellSize - (grid[0].length * cellSize) / 2;
-  princess.position.y = -i * cellSize + (grid.length * cellSize) / 2;
+  // Use expanded grid positioning
+  const expandedGridHeight = grid.length + WATER_ROWS_OFFSET;
+  const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
+  
+  princess.position.x = expandedPos.x;
+  princess.position.y = expandedPos.y;
   princess.position.z = 10;
   
   scene.add(princess);
@@ -234,17 +265,19 @@ async function createKnight() {
     // Position knight outside the dungeon (to the left of the starting position)
     const path = dungeonData.path;
     const [startI, startJ] = path[0];
-    const startX = startJ * cellSize - (dungeonData.input[0].length * cellSize) / 2;
-    const startY = -startI * cellSize + (dungeonData.input.length * cellSize) / 2;
+    
+    // Get expanded grid dimensions
+    const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+    const expandedPos = getExpandedPosition(startI, startJ, dungeonData.input[0].length, expandedGridHeight);
     
     // Place knight outside the dungeon (2 cells to the left)
-    knight.position.x = startX - (cellSize * 2);
-    knight.position.y = startY;
+    knight.position.x = expandedPos.x - (cellSize * 2);
+    knight.position.y = expandedPos.y;
     knight.position.z = 15;
     
     // Store the character controller and starting position for animations
     knight.characterController = directionalKnight;
-    knight.startingPosition = { x: startX, y: startY, z: 15 };
+    knight.startingPosition = { x: expandedPos.x, y: expandedPos.y, z: 15 };
     
     scene.add(knight);
     
@@ -266,8 +299,13 @@ async function createKnight() {
     
     const path = dungeonData.path;
     const [i, j] = path[0];
-    knight.position.x = j * cellSize - (dungeonData.input[0].length * cellSize) / 2;
-    knight.position.y = -i * cellSize + (dungeonData.input.length * cellSize) / 2;
+    
+    // Get expanded grid dimensions
+    const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+    const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
+    
+    knight.position.x = expandedPos.x;
+    knight.position.y = expandedPos.y;
     knight.position.z = 10;
     
     scene.add(knight);
@@ -313,9 +351,9 @@ function startAnimation() {
   }
   fightManager = new FightManager(scene, cellSize);
   
-  // Restore grid dimensions for enemy positioning
+  // Restore grid dimensions for enemy positioning (use expanded dimensions)
   scene.userData.gridWidth = dungeonData.input[0].length;
-  scene.userData.gridHeight = dungeonData.input.length;
+  scene.userData.gridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
   
   createEnemies(dungeonData.input);
   
@@ -327,15 +365,17 @@ function startAnimation() {
   // Position knight outside the dungeon for entrance
   const path = dungeonData.path;
   const [startI, startJ] = path[0];
-  const startX = startJ * cellSize - (dungeonData.input[0].length * cellSize) / 2;
-  const startY = -startI * cellSize + (dungeonData.input.length * cellSize) / 2;
   
-  knight.position.x = startX - (cellSize * 2);
-  knight.position.y = startY;
+  // Get expanded grid dimensions and position
+  const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+  const expandedPos = getExpandedPosition(startI, startJ, dungeonData.input[0].length, expandedGridHeight);
+  
+  knight.position.x = expandedPos.x - (cellSize * 2);
+  knight.position.y = expandedPos.y;
   knight.position.z = 15;
   
   // Store starting position
-  knight.startingPosition = { x: startX, y: startY, z: 15 };
+  knight.startingPosition = { x: expandedPos.x, y: expandedPos.y, z: 15 };
   
   // Start entrance animation
   animateEntrance();
@@ -414,8 +454,10 @@ function animatePath() {
       }
       
       // Animate knight movement
-      const targetX = j * cellSize - (dungeonData.input[0].length * cellSize) / 2;
-      const targetY = -i * cellSize + (dungeonData.input.length * cellSize) / 2;
+      const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+      const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
+      const targetX = expandedPos.x;
+      const targetY = expandedPos.y;
       
       // Smooth movement animation
       const startX = knight.position.x;
@@ -448,13 +490,15 @@ function animatePath() {
           if (step > 1) {
             const [prevI, prevJ] = path[step - 2];
             if (environmentManager) {
+              const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+              const expandedPrevI = prevI + WATER_ROWS_OFFSET;
               environmentManager.markCellAsVisited(
-                prevI, 
+                expandedPrevI, 
                 prevJ, 
                 cellSize, 
                 scene, 
                 dungeonData.input[0].length, 
-                dungeonData.input.length
+                expandedGridHeight
               );
             }
           }
@@ -463,19 +507,22 @@ function animatePath() {
           if (isEnteringRoom) {
             console.log(`🏠 Knight entered room with value: ${roomValue}`);
             
+            // Convert original coordinates to expanded coordinates for enemy system
+            const expandedI = i + WATER_ROWS_OFFSET;
+            
             // Notify enemy manager if entering a threat room
             if (isThreatRoom) {
-              enemyManager.onKnightEntersRoom(i, j, direction);
+              enemyManager.onKnightEntersRoom(expandedI, j, direction);
             }
             
             if (isThreatRoom) {
               // Threat room - check for enemy and start fight
               console.log('⚔️ Threat room detected - checking for enemy!');
               
-              const enemy = enemyManager.getEnemyAt(i, j);
+              const enemy = enemyManager.getEnemyAt(expandedI, j);
               
               if (enemy && !enemy.isDead) {
-                console.log(`👻 Knight encounters enemy at (${i}, ${j})!`);
+                console.log(`👻 Knight encounters enemy at expanded coordinates (${expandedI}, ${j})! Original: (${i}, ${j})`);
                 
                 // Start fight
                 fightManager.startFight(
@@ -508,10 +555,14 @@ function animatePath() {
               // Power room - collect power-up and idle
               console.log('💪 Power room detected - collecting power-up');
               
+              // Convert original coordinates to expanded coordinates for power-up system
+              const expandedI = i + WATER_ROWS_OFFSET;
+              
               // Collect power-up
-              const collectedPowerUp = powerUpManager.collectPowerUp(i, j);
+              const collectedPowerUp = powerUpManager.collectPowerUp(expandedI, j);
               
               if (collectedPowerUp) {
+                console.log(`💎 Collected power-up at expanded coordinates (${expandedI}, ${j})! Original: (${i}, ${j})`);
                 // Update knight's current power-up
                 knight.characterController.setCurrentPowerUp(collectedPowerUp);
                 
@@ -546,13 +597,15 @@ function animatePath() {
       if (path.length > 0) {
         const [finalI, finalJ] = path[path.length - 1];
         if (environmentManager) {
+          const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+          const expandedFinalI = finalI + WATER_ROWS_OFFSET;
           environmentManager.markCellAsVisited(
-            finalI, 
+            expandedFinalI, 
             finalJ, 
             cellSize, 
             scene, 
             dungeonData.input[0].length, 
-            dungeonData.input.length
+            expandedGridHeight
           );
         }
       }
@@ -564,8 +617,11 @@ function animatePath() {
         
         // Reset knight position
         const [i, j] = path[0];
-        knight.position.x = j * cellSize - (dungeonData.input[0].length * cellSize) / 2;
-        knight.position.y = -i * cellSize + (dungeonData.input.length * cellSize) / 2;
+        const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+        const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
+        
+        knight.position.x = expandedPos.x;
+        knight.position.y = expandedPos.y;
         knight.position.z = 15;
       }, 1000);
     }
