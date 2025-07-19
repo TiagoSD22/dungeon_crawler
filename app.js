@@ -5,6 +5,7 @@ import { PowerUpManager } from './PowerUpManager.js';
 import { SpellEffectManager } from './SpellEffectManager.js';
 import { EnemyManager } from './EnemyManager.js';
 import { FightManager } from './FightManager.js';
+import { EnvironmentManager } from './EnvironmentManager.js';
 
 const cellSize = 120;
 let scene, camera, renderer;
@@ -13,6 +14,7 @@ let powerUpManager;
 let spellEffectManager;
 let enemyManager;
 let fightManager;
+let environmentManager;
 let isAnimating = false;
 let zoomLevel = 1;
 let cameraPosition = { x: 0, y: 0 };
@@ -70,7 +72,12 @@ async function init() {
   document.getElementById('dungeonSize').textContent = `Dungeon Size: ${dungeonData.input.length} x ${dungeonData.input[0].length}`;
 
   createDungeon(dungeonData.input);
-  createGridLines(dungeonData.input);
+  // createGridLines(dungeonData.input); // Disabled grid lines to show floor textures clearly
+  
+  // Initialize environment manager and create floors
+  environmentManager = new EnvironmentManager();
+  environmentManager.createFloorsForDungeon(dungeonData.input, cellSize, scene);
+  
   createPrincess(dungeonData.input);
   
   // Initialize power-up manager
@@ -120,9 +127,9 @@ async function init() {
 }
 
 function createDungeon(grid) {
-  const materialNeutral = new THREE.MeshBasicMaterial({ color: 0x444444 });
-  const materialPower = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-  const materialThreat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  const materialNeutral = new THREE.MeshBasicMaterial({ color: 0x444444, opacity: 0.0, transparent: true });
+  const materialPower = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.0, transparent: true });
+  const materialThreat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.0, transparent: true });
 
   for (let i = 0; i < grid.length; i++) {
     for (let j = 0; j < grid[i].length; j++) {
@@ -282,6 +289,12 @@ function startAnimation() {
   
   // Reset power-up manager
   powerUpManager.clearInventory();
+  
+  // Reset floors
+  if (environmentManager) {
+    environmentManager.clearFloors(scene);
+    environmentManager.createFloorsForDungeon(dungeonData.input, cellSize, scene);
+  }
   
   // Reset power-ups (recreate them)
   powerUpManager.dispose();
@@ -559,6 +572,11 @@ function animate() {
   // Update enemies
   if (enemyManager) {
     enemyManager.updateAllEnemies(0.016);
+  }
+  
+  // Update environment
+  if (environmentManager) {
+    environmentManager.update(0.016);
   }
   
   renderer.render(scene, camera);
