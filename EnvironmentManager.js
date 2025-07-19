@@ -5,6 +5,7 @@ export class EnvironmentManager {
     this.floorTextures = {
       base: {},
       layers: {},
+      water: {}, // Add water textures
       plates: null
     };
     this.isLoaded = false;
@@ -29,6 +30,10 @@ export class EnvironmentManager {
       // Load layer textures
       this.floorTextures.layers.layer1 = await this.loadTexture(loader, './assets/environment/floors/floor_layer_1.PNG');
       this.floorTextures.layers.layer2 = await this.loadTexture(loader, './assets/environment/floors/floor_layer_2.PNG');
+      
+      // Load water textures
+      this.floorTextures.water.base = await this.loadTexture(loader, './assets/environment/floors/water_floor_base_1.PNG');
+      this.floorTextures.water.layer = await this.loadTexture(loader, './assets/environment/floors/water_layer_1.PNG');
       
       // Load plates texture
       this.floorTextures.plates = await this.loadTexture(loader, './assets/environment/floors/plates.png');
@@ -62,9 +67,75 @@ export class EnvironmentManager {
     });
   }
 
+  // Generate expanded matrix with 6 extra water rows at the top
+  generateExpandedMatrix(originalGrid) {
+    const width = originalGrid[0].length;
+    const extraRows = 6;
+    
+    // Create 6 rows of water environment (using value -999 to identify as water)
+    const waterRows = [];
+    for (let i = 0; i < extraRows; i++) {
+      const row = [];
+      for (let j = 0; j < width; j++) {
+        row.push(-999); // Special value for water environment
+      }
+      waterRows.push(row);
+    }
+    
+    // Combine water rows with original grid
+    const expandedGrid = [...waterRows, ...originalGrid];
+    
+    console.log(`🌊 Generated expanded matrix: ${expandedGrid.length}x${width} (added ${extraRows} water rows)`);
+    return expandedGrid;
+  }
+
+  createWaterFloorForCell(i, j, cellSize, scene, gridWidth, gridHeight) {
+    if (!this.isLoaded) {
+      console.warn('⚠️ Environment textures not loaded yet');
+      return;
+    }
+
+    // Calculate position
+    const x = j * cellSize - (gridWidth * cellSize) / 2;
+    const y = -i * cellSize + (gridHeight * cellSize) / 2;
+    
+    // Create water base floor
+    const waterBaseMaterial = new THREE.SpriteMaterial({
+      map: this.floorTextures.water.base,
+      transparent: false // Make fully opaque
+    });
+    
+    const waterBase = new THREE.Sprite(waterBaseMaterial);
+    waterBase.scale.set(cellSize * 1.15, cellSize * 1.15, 1); // Same size as regular floors
+    waterBase.position.set(x, y, -0.1); // Floor slightly behind the room boxes
+    scene.add(waterBase);
+    this.floorSprites.push(waterBase);
+
+    // 45% chance to add water layer detail
+    if (Math.random() < 0.45) {
+      const waterLayerMaterial = new THREE.SpriteMaterial({
+        map: this.floorTextures.water.layer,
+        transparent: true,
+        alphaTest: 0.1
+      });
+      
+      const waterLayer = new THREE.Sprite(waterLayerMaterial);
+      waterLayer.scale.set(cellSize * 0.3, cellSize * 0.3, 1); // Small detail like other layers
+      waterLayer.position.set(x, y, -0.05); // Layer slightly above base floor
+      scene.add(waterLayer);
+      this.floorSprites.push(waterLayer);
+    }
+  }
+
   createFloorForCell(i, j, cellSize, scene, gridWidth, gridHeight, roomValue = 0) {
     if (!this.isLoaded) {
       console.warn('⚠️ Environment textures not loaded yet');
+      return;
+    }
+
+    // Check if this is a water cell (expanded matrix water rows)
+    if (roomValue === -999) {
+      this.createWaterFloorForCell(i, j, cellSize, scene, gridWidth, gridHeight);
       return;
     }
 
@@ -79,18 +150,17 @@ export class EnvironmentManager {
     // Create base floor sprite
     const baseMaterial = new THREE.SpriteMaterial({
       map: baseTexture,
-      transparent: true,
-      alphaTest: 0.1
+      transparent: false // Make fully opaque
     });
     
     const baseFloor = new THREE.Sprite(baseMaterial);
-    baseFloor.scale.set(cellSize * 1.15, cellSize * 1.15, 1); // 15% larger to eliminate gaps completely
+    baseFloor.scale.set(cellSize * 1, cellSize * 1, 1); // 15% larger to eliminate gaps completely
     baseFloor.position.set(x, y, -0.1); // Floor slightly behind the room boxes
     scene.add(baseFloor);
     this.floorSprites.push(baseFloor);
 
     // 30% chance to add a floor layer
-    if (Math.random() < 0.6) {
+    /*if (Math.random() < 0.6) {
       const useLayer1 = Math.random() < 0.5;
       const layerTexture = useLayer1 ? this.floorTextures.layers.layer1 : this.floorTextures.layers.layer2;
       
@@ -105,7 +175,7 @@ export class EnvironmentManager {
       layerFloor.position.set(x, y, -0.05); // Layer slightly above base floor
       scene.add(layerFloor);
       this.floorSprites.push(layerFloor);
-    }
+    }*/
 
     // 15% chance to add plates (only on neutral or positive rooms)
     /*if (roomValue >= 0 && Math.random() < 0.15) {
@@ -141,14 +211,23 @@ export class EnvironmentManager {
       return;
     }
 
-    for (let i = 0; i < grid.length; i++) {
-      for (let j = 0; j < grid[i].length; j++) {
-        const roomValue = grid[i][j];
-        this.createFloorForCell(i, j, cellSize, scene, grid[0].length, grid.length, roomValue);
+    // Generate expanded matrix with water environment
+    const expandedGrid = this.generateExpandedMatrix(grid);
+
+    // Create floors for the expanded grid
+    for (let i = 0; i < expandedGrid.length; i++) {
+      for (let j = 0; j < expandedGrid[i].length; j++) {
+        const roomValue = expandedGrid[i][j];
+        this.createFloorForCell(i, j, cellSize, scene, expandedGrid[0].length, expandedGrid.length, roomValue);
       }
     }
     
-    console.log(`✅ Created ${this.floorSprites.length} floor elements!`);
+    console.log(`✅ Created ${this.floorSprites.length} floor elements for expanded dungeon!`);
+  }
+
+  // Method to get expanded matrix for use by other systems
+  getExpandedMatrix(originalGrid) {
+    return this.generateExpandedMatrix(originalGrid);
   }
 
   // Method to get floor statistics
@@ -196,7 +275,7 @@ export class EnvironmentManager {
     const darkMaterial = new THREE.SpriteMaterial({
       color: 0x000000, // Black
       transparent: true,
-      opacity: 0.3 // 30% opacity for subtle darkening
+      opacity: 0.5 // Increase opacity for better visibility on opaque floors
     });
     
     // Create a simple dark quad using a minimal texture
