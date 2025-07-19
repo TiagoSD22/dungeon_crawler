@@ -150,7 +150,8 @@ export class EnvironmentManager {
     // Create base floor sprite
     const baseMaterial = new THREE.SpriteMaterial({
       map: baseTexture,
-      transparent: false // Make fully opaque
+      transparent: false, // Make fully opaque
+      color: 0x505050 // Darken the floor tiles significantly
     });
     
     const baseFloor = new THREE.Sprite(baseMaterial);
@@ -271,33 +272,33 @@ export class EnvironmentManager {
     const x = gridJ * cellSize - (gridWidth * cellSize) / 2;
     const y = -gridI * cellSize + (gridHeight * cellSize) / 2;
     
-    // Create a dark overlay
-    const darkMaterial = new THREE.SpriteMaterial({
-      color: 0x000000, // Black
+    // Create a bright overlay to show visited cells on dark floors
+    const brightMaterial = new THREE.SpriteMaterial({
+      color: 0xffffff, // White for brightening effect
       transparent: true,
-      opacity: 0.5 // Increase opacity for better visibility on opaque floors
+      opacity: 0.2 // Subtle brightening overlay
     });
     
-    // Create a simple dark quad using a minimal texture
+    // Create a simple bright quad using a minimal texture
     const canvas = document.createElement('canvas');
     canvas.width = 32;
     canvas.height = 32;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = '#ffffff'; // White for brightening
     ctx.fillRect(0, 0, 32, 32);
     
-    const darkTexture = new THREE.CanvasTexture(canvas);
-    darkTexture.magFilter = THREE.NearestFilter;
-    darkTexture.minFilter = THREE.NearestFilter;
+    const brightTexture = new THREE.CanvasTexture(canvas);
+    brightTexture.magFilter = THREE.NearestFilter;
+    brightTexture.minFilter = THREE.NearestFilter;
     
-    darkMaterial.map = darkTexture;
+    brightMaterial.map = brightTexture;
     
-    const darkOverlay = new THREE.Sprite(darkMaterial);
-    darkOverlay.scale.set(cellSize * 1.15, cellSize * 1.15, 1); // Same size as base floor
-    darkOverlay.position.set(x, y, -0.01); // Above everything else but still behind room elements
+    const brightOverlay = new THREE.Sprite(brightMaterial);
+    brightOverlay.scale.set(cellSize * 1.15, cellSize * 1.15, 1); // Same size as base floor
+    brightOverlay.position.set(x, y, -0.01); // Above everything else but still behind room elements
     
-    scene.add(darkOverlay);
-    this.darkOverlays.push(darkOverlay);
+    scene.add(brightOverlay);
+    this.darkOverlays.push(brightOverlay);
     
     console.log(`🏃 Marked cell (${gridI},${gridJ}) as visited`);
   }
