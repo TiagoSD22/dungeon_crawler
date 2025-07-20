@@ -13,9 +13,16 @@ export class EnvironmentManager {
       corner: null
     };
     this.doorTexture = null; // Add door sprite sheet
+    this.entranceTextures = {
+      floorEntrance: null,
+      highFloor: null,
+      coffin: null,
+      statue: null
+    };
     this.isLoaded = false;
     this.floorSprites = [];
     this.wallSprites = []; // Store wall sprites separately
+    this.entranceSprites = []; // Store entrance environment sprites
     this.visitedCells = new Set(); // Track visited cells
     this.darkOverlays = []; // Store dark overlays for visited cells
     
@@ -27,6 +34,13 @@ export class EnvironmentManager {
     this.doorFrameTime = 0;
     this.doorFrameDuration = 0.5; // 0.5 seconds per frame
     this.doorTotalFrames = 4;
+    
+    // Statue animation properties
+    this.statueSprite = null;
+    this.statueCurrentFrame = 0;
+    this.statueLastFrame = 0;
+    this.statueAnimationSpeed = 300; // 300ms per frame
+    this.statueFrameCount = 6;
     
     // Load all floor textures
     this.loadTextures();
@@ -59,6 +73,12 @@ export class EnvironmentManager {
       
       // Load door sprite sheet
       this.doorTexture = await this.loadTexture(loader, './assets/environment/entrance_door.png');
+      
+      // Load entrance environment textures
+      this.entranceTextures.floorEntrance = await this.loadTexture(loader, './assets/environment/floors/floor_entrance.PNG');
+      this.entranceTextures.highFloor = await this.loadTexture(loader, './assets/environment/floors/high_floor.PNG');
+      this.entranceTextures.coffin = await this.loadTexture(loader, './assets/environment/coffin.png');
+      this.entranceTextures.statue = await this.loadTexture(loader, './assets/environment/statue.png');
       
       this.isLoaded = true;
       console.log('✅ Environment textures loaded successfully!');
@@ -120,6 +140,14 @@ export class EnvironmentManager {
         if (i === extraRows && j === 1) { // extraRows puts us at the first row of the original dungeon, j=1 is first column after left wall
           row.push(-555); // Special value for door
         }
+        // Special case for knight starting position: entrance environment
+        else if (i === extraRows - 1 && j === 1) { // One row above door, same column
+          row.push(-333); // Special value for knight entrance environment
+        }
+        // Special case for statue position: two rows above door, same column
+        else if (i === extraRows - 2 && j === 1) { // Two rows above door, same column
+          row.push(-444); // Special value for statue
+        }
         // Check if this is a wall position
         else if (i === 0 || i === paddedHeight - 1 || j === 0 || j === paddedWidth - 1) {
           // This is a wall border position
@@ -153,36 +181,9 @@ export class EnvironmentManager {
       return;
     }
 
-    // Calculate position
-    const x = j * cellSize - (gridWidth * cellSize) / 2;
-    const y = -i * cellSize + (gridHeight * cellSize) / 2;
-    
-    // Create water base floor
-    const waterBaseMaterial = new THREE.SpriteMaterial({
-      map: this.floorTextures.water.base,
-      transparent: false // Make fully opaque
-    });
-    
-    const waterBase = new THREE.Sprite(waterBaseMaterial);
-    waterBase.scale.set(cellSize * 1.15, cellSize * 1.15, 1); // Same size as regular floors
-    waterBase.position.set(x, y, -0.1); // Floor slightly behind the room boxes
-    scene.add(waterBase);
-    this.floorSprites.push(waterBase);
-
-    // 45% chance to add water layer detail
-    if (Math.random() < 0.45) {
-      const waterLayerMaterial = new THREE.SpriteMaterial({
-        map: this.floorTextures.water.layer,
-        transparent: true,
-        alphaTest: 0.1
-      });
-      
-      const waterLayer = new THREE.Sprite(waterLayerMaterial);
-      waterLayer.scale.set(cellSize * 0.3, cellSize * 0.3, 1); // Small detail like other layers
-      waterLayer.position.set(x, y, -0.05); // Layer slightly above base floor
-      scene.add(waterLayer);
-      this.floorSprites.push(waterLayer);
-    }
+    // Water cells are now fully transparent - no assets added
+    // This creates empty space where water would be
+    console.log(`💧 Water cell at (${i},${j}) - transparent, no assets`);
   }
 
   createFloorForCell(i, j, cellSize, scene, gridWidth, gridHeight, roomValue = 0) {
@@ -194,6 +195,18 @@ export class EnvironmentManager {
     // Check if this is a door cell
     if (roomValue === -555) {
       this.createDoorForCell(i, j, cellSize, scene, gridWidth, gridHeight);
+      return;
+    }
+
+    // Check if this is knight entrance environment cell
+    if (roomValue === -333) {
+      this.createEntranceEnvironmentForCell(i, j, cellSize, scene, gridWidth, gridHeight);
+      return;
+    }
+
+    // Check if this is statue cell
+    if (roomValue === -444) {
+      this.createStatueForCell(i, j, cellSize, scene, gridWidth, gridHeight);
       return;
     }
 
@@ -291,25 +304,25 @@ export class EnvironmentManager {
     // Check which wall this is and adjust position to be close to the dungeon
     if (i === 0) {
       // Top wall - move down towards dungeon, rotate to horizontal
-      y = baseY - cellSize * 0.3;
+      y = baseY - cellSize * 0.45; // Move much closer to entrance area
       rotation = 0; // Horizontal orientation
       scaleX = cellSize * 1.2; // Make wall segments wider to fill gaps
       scaleY = cellSize * 0.25;
     } else if (i === gridHeight - 1) {
       // Bottom wall - move up towards dungeon, rotate to horizontal
-      y = baseY + cellSize * 0.3;
+      y = baseY + cellSize * 0.45; // Move much closer to dungeon content
       rotation = 0; // Horizontal orientation
       scaleX = cellSize * 1.2; // Make wall segments wider to fill gaps
       scaleY = cellSize * 0.25;
     } else if (j === 0) {
       // Left wall - move right towards dungeon, keep vertical
-      x = baseX + cellSize * 0.3;
+      x = baseX + cellSize * 0.45; // Move much closer to entrance area
       rotation = Math.PI / 2; // Vertical orientation
       scaleX = cellSize * 1.2; // Make wall segments wider to fill gaps
       scaleY = cellSize * 0.25;
     } else if (j === gridWidth - 1) {
       // Right wall - move left towards dungeon, keep vertical
-      x = baseX - cellSize * 0.3;
+      x = baseX - cellSize * 0.45; // Move much closer to entrance area
       rotation = Math.PI / 2; // Vertical orientation
       scaleX = cellSize * 1.2; // Make wall segments wider to fill gaps
       scaleY = cellSize * 0.25;
@@ -349,20 +362,20 @@ export class EnvironmentManager {
     
     if (i === 0 && j === 0) {
       // Top-left corner: move down and right towards dungeon
-      x = baseX + cellSize * 0.3;
-      y = baseY - cellSize * 0.3;
+      x = baseX + cellSize * 0.45; // Match wall positioning for tight enclosure
+      y = baseY - cellSize * 0.45;
     } else if (i === 0 && j === gridWidth - 1) {
       // Top-right corner: move down and left towards dungeon
-      x = baseX - cellSize * 0.3;
-      y = baseY - cellSize * 0.3;
+      x = baseX - cellSize * 0.45; // Match wall positioning for tight enclosure
+      y = baseY - cellSize * 0.45;
     } else if (i === gridHeight - 1 && j === 0) {
       // Bottom-left corner: move up and right towards dungeon
-      x = baseX + cellSize * 0.3;
-      y = baseY + cellSize * 0.3;
+      x = baseX + cellSize * 0.45; // Match wall positioning for tight enclosure
+      y = baseY + cellSize * 0.45;
     } else if (i === gridHeight - 1 && j === gridWidth - 1) {
       // Bottom-right corner: move up and left towards dungeon
-      x = baseX - cellSize * 0.3;
-      y = baseY + cellSize * 0.3;
+      x = baseX - cellSize * 0.45; // Match wall positioning for tight enclosure
+      y = baseY + cellSize * 0.45;
     }
     
     // Determine which corner this is and set appropriate rotation
@@ -433,6 +446,102 @@ export class EnvironmentManager {
     this.doorSprite = doorSprite; // Store reference for animation
     
     console.log('🚪 Door created at position:', { i, j, x, y });
+  }
+
+  createEntranceEnvironmentForCell(i, j, cellSize, scene, gridWidth, gridHeight) {
+    if (!this.isLoaded) {
+      console.warn('⚠️ Environment textures not loaded yet');
+      return;
+    }
+
+    // Calculate position
+    const x = j * cellSize - (gridWidth * cellSize) / 2;
+    const y = -i * cellSize + (gridHeight * cellSize) / 2;
+    
+    // Layer 1: Floor entrance base
+    const floorEntranceMaterial = new THREE.SpriteMaterial({
+      map: this.entranceTextures.floorEntrance,
+      transparent: false,
+      alphaTest: 0.9
+    });
+    
+    const floorEntranceSprite = new THREE.Sprite(floorEntranceMaterial);
+    floorEntranceSprite.scale.set(cellSize * 1.1, cellSize * 1.1, 1);
+    floorEntranceSprite.position.set(x, y, -0.1); // Floor level
+    scene.add(floorEntranceSprite);
+    this.entranceSprites.push(floorEntranceSprite);
+    
+    // Layer 2: High floor above entrance floor
+    const highFloorMaterial = new THREE.SpriteMaterial({
+      map: this.entranceTextures.highFloor,
+      transparent: true,
+      alphaTest: 0.1
+    });
+    
+    const highFloorSprite = new THREE.Sprite(highFloorMaterial);
+    highFloorSprite.scale.set(cellSize * 1.0, cellSize * 1.0, 1);
+    highFloorSprite.position.set(x, y, -0.05); // Above floor entrance
+    scene.add(highFloorSprite);
+    this.entranceSprites.push(highFloorSprite);
+    
+    // Layer 3: Coffin on top - moved up toward beginning of room
+    const coffinMaterial = new THREE.SpriteMaterial({
+      map: this.entranceTextures.coffin,
+      transparent: false,
+      alphaTest: 0.1
+    });
+    
+    const coffinSprite = new THREE.Sprite(coffinMaterial);
+    coffinSprite.scale.set(cellSize * 0.8, cellSize * 0.8, 1);
+    coffinSprite.position.set(x, y + cellSize * 0.4, 0.15); // Moved up and positioned above statue (z=0.15 > statue's z=0.1)
+    scene.add(coffinSprite);
+    this.entranceSprites.push(coffinSprite);
+    
+    console.log('🏛️ Entrance environment created at position:', { i, j, x, y });
+  }
+
+  createStatueForCell(i, j, cellSize, scene, gridWidth, gridHeight) {
+    if (!this.isLoaded) {
+      console.warn('⚠️ Environment textures not loaded yet');
+      return;
+    }
+
+    // Calculate position
+    const x = j * cellSize - (gridWidth * cellSize) / 2;
+    const y = -i * cellSize + (gridHeight * cellSize) / 2;
+    
+    // Add floor layer for statue cell using floor_entrance.PNG
+    const statueFloorMaterial = new THREE.SpriteMaterial({
+      map: this.entranceTextures.floorEntrance,
+      transparent: false
+    });
+    
+    const statueFloorSprite = new THREE.Sprite(statueFloorMaterial);
+    statueFloorSprite.scale.set(cellSize * 1.1, cellSize * 1.1, 1); // Cover entire cell
+    statueFloorSprite.position.set(x, y, -0.1); // Floor level, same as other floors
+    scene.add(statueFloorSprite);
+    this.entranceSprites.push(statueFloorSprite);
+    
+    // Create animated statue sprite
+    const statueMaterial = new THREE.SpriteMaterial({
+      map: this.entranceTextures.statue,
+      transparent: false,
+      alphaTest: 1.0
+    });
+    
+    // Set up UV coordinates for sprite sheet animation (6 frames in one row)
+    statueMaterial.map.repeat.set(1/6, 1); // Show 1/6 of the texture width
+    statueMaterial.map.offset.set(0, 0); // Start at the first frame
+    
+    const statueSprite = new THREE.Sprite(statueMaterial);
+    statueSprite.scale.set(cellSize * 1.0, cellSize * 1.0, 1);
+    statueSprite.position.set(x, y, 0.1); // Above floor (z=0.1) but below coffin (z=0.15)
+    
+    scene.add(statueSprite);
+    this.statueSprite = statueSprite; // Store reference for animation
+    this.entranceSprites.push(statueSprite);
+    
+    console.log('🗿 Statue created at position:', { i, j, x, y });
   }
 
   createFloorsForDungeon(grid, cellSize, scene) {
@@ -661,10 +770,36 @@ export class EnvironmentManager {
     console.log('🚪 Door animation reset');
   }
 
+  updateStatueAnimation() {
+    if (this.statueSprite && this.statueSprite.material.map) {
+      const now = Date.now();
+      
+      // Initialize lastFrame if not set
+      if (this.statueLastFrame === 0) {
+        this.statueLastFrame = now;
+      }
+      
+      if (now - this.statueLastFrame > this.statueAnimationSpeed) {
+        this.statueCurrentFrame = (this.statueCurrentFrame + 1) % this.statueFrameCount;
+        
+        // Update UV offset for horizontal sprite sheet
+        const offsetX = this.statueCurrentFrame / this.statueFrameCount;
+        this.statueSprite.material.map.offset.x = offsetX;
+        
+        this.statueLastFrame = now;
+        
+        console.log(`🗿 Statue frame: ${this.statueCurrentFrame}, offset: ${offsetX}`);
+      }
+    }
+  }
+
   // Method to update floor animations (if needed in the future)
   update(deltaTime) {
     // Update door animation
     this.updateDoorAnimation(deltaTime);
+    
+    // Update statue animation
+    this.updateStatueAnimation();
     
     // Currently floors are static, but this method is here for future enhancements
     // like animated water floors, glowing magic circles, etc.
