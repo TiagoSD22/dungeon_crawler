@@ -8,10 +8,25 @@ export class EnvironmentManager {
       water: {}, // Add water textures
       plates: null
     };
+    this.wallTextures = {
+      wall: null,
+      corner: null
+    };
+    this.doorTexture = null; // Add door sprite sheet
     this.isLoaded = false;
     this.floorSprites = [];
+    this.wallSprites = []; // Store wall sprites separately
     this.visitedCells = new Set(); // Track visited cells
     this.darkOverlays = []; // Store dark overlays for visited cells
+    
+    // Door animation properties
+    this.doorSprite = null;
+    this.doorAnimationStarted = false;
+    this.doorAnimationCompleted = false;
+    this.doorCurrentFrame = 0;
+    this.doorFrameTime = 0;
+    this.doorFrameDuration = 0.5; // 0.5 seconds per frame
+    this.doorTotalFrames = 4;
     
     // Load all floor textures
     this.loadTextures();
@@ -37,6 +52,13 @@ export class EnvironmentManager {
       
       // Load plates texture
       this.floorTextures.plates = await this.loadTexture(loader, './assets/environment/floors/plates.png');
+      
+      // Load wall textures
+      this.wallTextures.wall = await this.loadTexture(loader, './assets/environment/surrouding _wall_tile.PNG');
+      this.wallTextures.corner = await this.loadTexture(loader, './assets/environment/surrouding _wall_corner_tile.PNG');
+      
+      // Load door sprite sheet
+      this.doorTexture = await this.loadTexture(loader, './assets/environment/entrance_door.png');
       
       this.isLoaded = true;
       console.log('✅ Environment textures loaded successfully!');
@@ -67,7 +89,7 @@ export class EnvironmentManager {
     });
   }
 
-  // Generate expanded matrix with 6 extra water rows at the top
+  // Generate expanded matrix with 6 extra water rows at the top + wall padding
   generateExpandedMatrix(originalGrid) {
     const width = originalGrid[0].length;
     const extraRows = 6;
@@ -83,10 +105,46 @@ export class EnvironmentManager {
     }
     
     // Combine water rows with original grid
-    const expandedGrid = [...waterRows, ...originalGrid];
+    let expandedGrid = [...waterRows, ...originalGrid];
     
-    console.log(`🌊 Generated expanded matrix: ${expandedGrid.length}x${width} (added ${extraRows} water rows)`);
-    return expandedGrid;
+    // Now add wall padding around the entire expanded grid
+    const paddedWidth = width + 2; // Add 1 column on each side
+    const paddedHeight = expandedGrid.length + 2; // Add 1 row on top and bottom
+    
+    const finalGrid = [];
+    
+    for (let i = 0; i < paddedHeight; i++) {
+      const row = [];
+      for (let j = 0; j < paddedWidth; j++) {
+        // Special case for door position: first column of the last row before the knight's line (last water row)
+        if (i === extraRows && j === 1) { // extraRows puts us at the first row of the original dungeon, j=1 is first column after left wall
+          row.push(-555); // Special value for door
+        }
+        // Check if this is a wall position
+        else if (i === 0 || i === paddedHeight - 1 || j === 0 || j === paddedWidth - 1) {
+          // This is a wall border position
+          if ((i === 0 && j === 0) || 
+              (i === 0 && j === paddedWidth - 1) || 
+              (i === paddedHeight - 1 && j === 0) || 
+              (i === paddedHeight - 1 && j === paddedWidth - 1)) {
+            // Corner positions
+            row.push(-777); // Special value for wall corners
+          } else {
+            // Regular wall positions
+            row.push(-888); // Special value for walls
+          }
+        } else {
+          // This is an interior position, get from expanded grid
+          const originalI = i - 1; // Adjust for top wall padding
+          const originalJ = j - 1; // Adjust for left wall padding
+          row.push(expandedGrid[originalI][originalJ]);
+        }
+      }
+      finalGrid.push(row);
+    }
+    
+    console.log(`� Generated expanded matrix with walls: ${finalGrid.length}x${paddedWidth} (added ${extraRows} water rows + wall padding)`);
+    return finalGrid;
   }
 
   createWaterFloorForCell(i, j, cellSize, scene, gridWidth, gridHeight) {
@@ -130,6 +188,24 @@ export class EnvironmentManager {
   createFloorForCell(i, j, cellSize, scene, gridWidth, gridHeight, roomValue = 0) {
     if (!this.isLoaded) {
       console.warn('⚠️ Environment textures not loaded yet');
+      return;
+    }
+
+    // Check if this is a door cell
+    if (roomValue === -555) {
+      this.createDoorForCell(i, j, cellSize, scene, gridWidth, gridHeight);
+      return;
+    }
+
+    // Check if this is a wall corner cell
+    if (roomValue === -777) {
+      this.createWallCornerForCell(i, j, cellSize, scene, gridWidth, gridHeight);
+      return;
+    }
+
+    // Check if this is a wall cell
+    if (roomValue === -888) {
+      this.createWallForCell(i, j, cellSize, scene, gridWidth, gridHeight);
       return;
     }
 
@@ -195,6 +271,170 @@ export class EnvironmentManager {
     }*/
   }
 
+  createWallForCell(i, j, cellSize, scene, gridWidth, gridHeight) {
+    if (!this.isLoaded) {
+      console.warn('⚠️ Environment textures not loaded yet');
+      return;
+    }
+
+    // Calculate base position
+    const baseX = j * cellSize - (gridWidth * cellSize) / 2;
+    const baseY = -i * cellSize + (gridHeight * cellSize) / 2;
+    
+    // Determine wall position and rotation based on location
+    let x = baseX;
+    let y = baseY;
+    let rotation = 0;
+    let scaleX = cellSize * 0.4;
+    let scaleY = cellSize * 0.2;
+    
+    // Check which wall this is and adjust position to be close to the dungeon
+    if (i === 0) {
+      // Top wall - move down towards dungeon, rotate to horizontal
+      y = baseY - cellSize * 0.3;
+      rotation = 0; // Horizontal orientation
+      scaleX = cellSize * 1.2; // Make wall segments wider to fill gaps
+      scaleY = cellSize * 0.25;
+    } else if (i === gridHeight - 1) {
+      // Bottom wall - move up towards dungeon, rotate to horizontal
+      y = baseY + cellSize * 0.3;
+      rotation = 0; // Horizontal orientation
+      scaleX = cellSize * 1.2; // Make wall segments wider to fill gaps
+      scaleY = cellSize * 0.25;
+    } else if (j === 0) {
+      // Left wall - move right towards dungeon, keep vertical
+      x = baseX + cellSize * 0.3;
+      rotation = Math.PI / 2; // Vertical orientation
+      scaleX = cellSize * 1.2; // Make wall segments wider to fill gaps
+      scaleY = cellSize * 0.25;
+    } else if (j === gridWidth - 1) {
+      // Right wall - move left towards dungeon, keep vertical
+      x = baseX - cellSize * 0.3;
+      rotation = Math.PI / 2; // Vertical orientation
+      scaleX = cellSize * 1.2; // Make wall segments wider to fill gaps
+      scaleY = cellSize * 0.25;
+    }
+    
+    // Create wall sprite
+    const wallMaterial = new THREE.SpriteMaterial({
+      map: this.wallTextures.wall,
+      transparent: true,
+      alphaTest: 0.1
+    });
+    
+    const wallSprite = new THREE.Sprite(wallMaterial);
+    wallSprite.scale.set(scaleX, scaleY, 1);
+    
+    // Apply rotation
+    wallSprite.material.rotation = rotation;
+    
+    wallSprite.position.set(x, y, 0.1); // Wall in front of floors
+    scene.add(wallSprite);
+    this.wallSprites.push(wallSprite);
+  }
+
+  createWallCornerForCell(i, j, cellSize, scene, gridWidth, gridHeight) {
+    if (!this.isLoaded) {
+      console.warn('⚠️ Environment textures not loaded yet');
+      return;
+    }
+
+    // Calculate base position
+    const baseX = j * cellSize - (gridWidth * cellSize) / 2;
+    const baseY = -i * cellSize + (gridHeight * cellSize) / 2;
+    
+    // Adjust corner position to be closer to the dungeon
+    let x = baseX;
+    let y = baseY;
+    
+    if (i === 0 && j === 0) {
+      // Top-left corner: move down and right towards dungeon
+      x = baseX + cellSize * 0.3;
+      y = baseY - cellSize * 0.3;
+    } else if (i === 0 && j === gridWidth - 1) {
+      // Top-right corner: move down and left towards dungeon
+      x = baseX - cellSize * 0.3;
+      y = baseY - cellSize * 0.3;
+    } else if (i === gridHeight - 1 && j === 0) {
+      // Bottom-left corner: move up and right towards dungeon
+      x = baseX + cellSize * 0.3;
+      y = baseY + cellSize * 0.3;
+    } else if (i === gridHeight - 1 && j === gridWidth - 1) {
+      // Bottom-right corner: move up and left towards dungeon
+      x = baseX - cellSize * 0.3;
+      y = baseY + cellSize * 0.3;
+    }
+    
+    // Determine which corner this is and set appropriate rotation
+    let rotation = 0;
+    if (i === 0 && j === 0) {
+      // Top-left corner: rotate 90 degrees counterclockwise
+      rotation = Math.PI / 2;
+    } else if (i === 0 && j === gridWidth - 1) {
+      // Top-right corner: rotate 180 degrees clockwise
+      rotation = 0;
+    } else if (i === gridHeight - 1 && j === 0) {
+      // Bottom-left corner: original orientation (base image is for bottom-left)
+      rotation = Math.PI;
+    } else if (i === gridHeight - 1 && j === gridWidth - 1) {
+      // Bottom-right corner: rotate 90 degrees counterclockwise (270 degrees clockwise)
+      rotation = -Math.PI / 2;
+    }
+    
+    // Create wall corner sprite
+    const cornerMaterial = new THREE.SpriteMaterial({
+      map: this.wallTextures.corner,
+      transparent: true,
+      alphaTest: 0.1
+    });
+    
+    const cornerSprite = new THREE.Sprite(cornerMaterial);
+    cornerSprite.scale.set(cellSize * 0.3, cellSize * 0.3, 1); // Smaller corners to match thin brick walls
+    
+    // Apply rotation
+    cornerSprite.material.rotation = rotation;
+    
+    cornerSprite.position.set(x, y, 0.1); // Wall in front of floors
+    scene.add(cornerSprite);
+    this.wallSprites.push(cornerSprite);
+  }
+
+  createDoorForCell(i, j, cellSize, scene, gridWidth, gridHeight) {
+    if (!this.isLoaded) {
+      console.warn('⚠️ Environment textures not loaded yet');
+      return;
+    }
+
+    // Calculate position
+    const x = j * cellSize - (gridWidth * cellSize) / 2;
+    const y = -i * cellSize + (gridHeight * cellSize) / 2;
+    
+    // Create door sprite with initial frame (top frame - frame 0, open door)
+    const doorMaterial = new THREE.SpriteMaterial({
+      map: this.doorTexture,
+      transparent: false,
+      alphaTest: 0.1
+    });
+    
+    // Set up UV coordinates for sprite sheet animation
+    // The sprite sheet has 4 frames in a vertical column (1 column, 4 rows)
+    // We start with the top frame (frame 0, which is the open door)
+    doorMaterial.map.repeat.set(1, 0.25); // Show 1/4 of the texture height
+    doorMaterial.map.offset.set(0, 0.0); // Start at the top frame (0.0 offset for top quarter)
+    
+    const doorSprite = new THREE.Sprite(doorMaterial);
+    doorSprite.scale.set(cellSize * 1.1, cellSize * 1.1, 1); // Slightly smaller than cell
+    doorSprite.position.set(x, y, 0.2); // Door in front of floors and walls
+    
+    // Store the fixed position to prevent movement during animation
+    doorSprite.userData = { fixedX: x, fixedY: y, fixedZ: 0.2 };
+    
+    scene.add(doorSprite);
+    this.doorSprite = doorSprite; // Store reference for animation
+    
+    console.log('🚪 Door created at position:', { i, j, x, y });
+  }
+
   createFloorsForDungeon(grid, cellSize, scene) {
     console.log('🏗️ Creating floors for dungeon...');
     
@@ -231,17 +471,20 @@ export class EnvironmentManager {
     return this.generateExpandedMatrix(originalGrid);
   }
 
-  // Method to get floor statistics
+  // Method to get floor and wall statistics
   getFloorStats() {
     const stats = {
       totalFloors: this.floorSprites.length,
+      totalWalls: this.wallSprites.length,
+      totalElements: this.floorSprites.length + this.wallSprites.length,
       isLoaded: this.isLoaded
     };
     return stats;
   }
 
-  // Method to clear all floors (useful for regenerating dungeon)
+  // Method to clear all floors and walls (useful for regenerating dungeon)
   clearFloors(scene) {
+    // Clear floor sprites
     this.floorSprites.forEach(sprite => {
       scene.remove(sprite);
       if (sprite.material.map) {
@@ -251,10 +494,30 @@ export class EnvironmentManager {
     });
     this.floorSprites = [];
     
+    // Clear wall sprites
+    this.wallSprites.forEach(sprite => {
+      scene.remove(sprite);
+      if (sprite.material.map) {
+        sprite.material.map.dispose();
+      }
+      sprite.material.dispose();
+    });
+    this.wallSprites = [];
+    
+    // Clear door sprite
+    if (this.doorSprite) {
+      scene.remove(this.doorSprite);
+      if (this.doorSprite.material.map) {
+        this.doorSprite.material.map.dispose();
+      }
+      this.doorSprite.material.dispose();
+      this.doorSprite = null;
+    }
+    
     // Also clear visited cells when clearing floors
     this.clearVisitedCells(scene);
     
-    console.log('🧹 Cleared all floor elements');
+    console.log('🧹 Cleared all floor and wall elements');
   }
 
   // Method to mark a cell as visited and darken it
@@ -324,8 +587,85 @@ export class EnvironmentManager {
     return this.visitedCells.size;
   }
 
+  // Method to start door closing animation
+  startDoorAnimation() {
+    if (!this.doorSprite || this.doorAnimationStarted) {
+      return; // No door or animation already started
+    }
+    
+    this.doorAnimationStarted = true;
+    this.doorCurrentFrame = 0;
+    this.doorFrameTime = 0;
+    
+    console.log('🚪 Door closing animation started!');
+  }
+
+  // Method to update door animation
+  updateDoorAnimation(deltaTime) {
+    if (!this.doorAnimationStarted || this.doorAnimationCompleted || !this.doorSprite) {
+      return;
+    }
+    
+    this.doorFrameTime += deltaTime;
+    
+    if (this.doorFrameTime >= this.doorFrameDuration) {
+      this.doorFrameTime = 0;
+      this.doorCurrentFrame++;
+      
+      if (this.doorCurrentFrame >= this.doorTotalFrames) {
+        // Animation completed - door is now closed
+        this.doorAnimationCompleted = true;
+        this.doorCurrentFrame = this.doorTotalFrames - 1; // Stay at the last frame
+        console.log('🚪 Door closing animation completed!');
+      }
+      
+      // Update the UV offset to show the current frame (inverted order for closing)
+      // Frame 0 = top (offset 0.0), Frame 1 = (offset 0.25), Frame 2 = (offset 0.5), Frame 3 = bottom (offset 0.75)
+      const frameOffset = this.doorCurrentFrame * 0.25;
+      this.doorSprite.material.map.offset.set(0, frameOffset);
+      
+      // Ensure position remains fixed during animation
+      if (this.doorSprite.userData) {
+        this.doorSprite.position.set(
+          this.doorSprite.userData.fixedX,
+          this.doorSprite.userData.fixedY,
+          this.doorSprite.userData.fixedZ
+        );
+      }
+      
+      console.log(`🚪 Door frame: ${this.doorCurrentFrame}, offset: ${frameOffset}`);
+    }
+  }
+
+  // Method to reset door animation (for dungeon reset)
+  resetDoorAnimation() {
+    if (this.doorSprite) {
+      // Reset to initial frame (top frame - open door)
+      this.doorSprite.material.map.offset.set(0, 0.0);
+      
+      // Ensure position is also reset to fixed position
+      if (this.doorSprite.userData) {
+        this.doorSprite.position.set(
+          this.doorSprite.userData.fixedX,
+          this.doorSprite.userData.fixedY,
+          this.doorSprite.userData.fixedZ
+        );
+      }
+    }
+    
+    this.doorAnimationStarted = false;
+    this.doorAnimationCompleted = false;
+    this.doorCurrentFrame = 0;
+    this.doorFrameTime = 0;
+    
+    console.log('🚪 Door animation reset');
+  }
+
   // Method to update floor animations (if needed in the future)
   update(deltaTime) {
+    // Update door animation
+    this.updateDoorAnimation(deltaTime);
+    
     // Currently floors are static, but this method is here for future enhancements
     // like animated water floors, glowing magic circles, etc.
   }
