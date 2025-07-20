@@ -9,14 +9,17 @@ import { EnvironmentManager } from './EnvironmentManager.js';
 
 const cellSize = 120;
 const WATER_ROWS_OFFSET = 6; // Number of water rows added above the original dungeon
+const WALL_PADDING = 1; // Wall padding on all sides
 let scene, camera, renderer;
 
-// Helper function to convert original grid coordinates to expanded grid coordinates
+// Helper function to convert original grid coordinates to expanded grid coordinates (with walls)
 function getExpandedPosition(originalI, originalJ, originalGridWidth, expandedGridHeight) {
-  const expandedI = originalI + WATER_ROWS_OFFSET; // Add offset for water rows
-  const x = originalJ * cellSize - (originalGridWidth * cellSize) / 2;
+  const expandedI = originalI + WATER_ROWS_OFFSET + WALL_PADDING; // Add offset for water rows and top wall
+  const expandedJ = originalJ + WALL_PADDING; // Add offset for left wall
+  const expandedGridWidth = originalGridWidth + (2 * WALL_PADDING); // Account for left and right walls
+  const x = expandedJ * cellSize - (expandedGridWidth * cellSize) / 2;
   const y = -expandedI * cellSize + (expandedGridHeight * cellSize) / 2;
-  return { x, y, expandedI };
+  return { x, y, expandedI, expandedJ };
 }
 
 let knight, princess;
@@ -56,9 +59,14 @@ async function init() {
   fillLight.position.set(-100, -100, 100);
   scene.add(fillLight);
 
-  // Calculate dungeon dimensions for proper camera setup (including water rows)
-  const dungeonWidth = dungeonData.input[0].length * cellSize;
-  const expandedDungeonHeight = (dungeonData.input.length + WATER_ROWS_OFFSET) * cellSize;
+  // Calculate dungeon dimensions for proper camera setup (including water rows and walls)
+  const originalWidth = dungeonData.input[0].length;
+  const originalHeight = dungeonData.input.length;
+  const expandedWidth = originalWidth + (2 * WALL_PADDING); // Add walls on left and right
+  const expandedHeight = originalHeight + WATER_ROWS_OFFSET + (2 * WALL_PADDING); // Add water rows and walls on top and bottom
+  
+  const dungeonWidth = expandedWidth * cellSize;
+  const expandedDungeonHeight = expandedHeight * cellSize;
   const maxDimension = Math.max(dungeonWidth, expandedDungeonHeight);
   
   // Set up orthographic camera with proper bounds
@@ -98,9 +106,9 @@ async function init() {
   enemyManager = new EnemyManager();
   await enemyManager.initialize(scene);
   
-  // Store grid dimensions for enemy positioning (use expanded dimensions)
-  scene.userData.gridWidth = dungeonData.input[0].length;
-  scene.userData.gridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+  // Store grid dimensions for enemy positioning (use expanded dimensions with walls)
+  scene.userData.gridWidth = dungeonData.input[0].length + (2 * WALL_PADDING);
+  scene.userData.gridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
   
   await createEnemies(dungeonData.input);
   
@@ -168,15 +176,15 @@ function createDungeon(grid) {
 async function createPowerUps(grid) {
   console.log('🔮 Creating power-ups for power rooms...');
   
-  const expandedGridHeight = grid.length + WATER_ROWS_OFFSET;
+  const expandedGridHeight = grid.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
   
   for (let i = 0; i < grid.length; i++) {
     for (let j = 0; j < grid[i].length; j++) {
       const roomValue = grid[i][j];
       if (roomValue > 0) {
-        // Use expanded coordinates for power-up positioning
-        const expandedI = i + WATER_ROWS_OFFSET;
-        await powerUpManager.createPowerUpForRoom(expandedI, j, roomValue, cellSize, scene, grid[0].length, expandedGridHeight);
+        // Use expanded coordinates for power-up positioning with wall padding
+        const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
+        await powerUpManager.createPowerUpForRoom(expandedPos.expandedI, expandedPos.expandedJ, roomValue, cellSize, scene, grid[0].length + (2 * WALL_PADDING), expandedGridHeight);
       }
     }
   }
@@ -187,15 +195,15 @@ async function createPowerUps(grid) {
 async function createEnemies(grid) {
   console.log('👻 Creating enemies for threat rooms...');
   
-  const expandedGridHeight = grid.length + WATER_ROWS_OFFSET;
+  const expandedGridHeight = grid.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
   
   for (let i = 0; i < grid.length; i++) {
     for (let j = 0; j < grid[i].length; j++) {
       const roomValue = grid[i][j];
       if (roomValue < 0) {
-        // Use expanded coordinates for enemy positioning
-        const expandedI = i + WATER_ROWS_OFFSET;
-        await enemyManager.createEnemyForRoom(expandedI, j, roomValue, cellSize, scene, grid[0].length, expandedGridHeight);
+        // Use expanded coordinates for enemy positioning with wall padding
+        const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
+        await enemyManager.createEnemyForRoom(expandedPos.expandedI, expandedPos.expandedJ, roomValue, cellSize, scene, grid[0].length + (2 * WALL_PADDING), expandedGridHeight);
       }
     }
   }
@@ -240,7 +248,7 @@ function createPrincess(grid) {
   );
   
   // Use expanded grid positioning
-  const expandedGridHeight = grid.length + WATER_ROWS_OFFSET;
+  const expandedGridHeight = grid.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
   const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
   
   princess.position.x = expandedPos.x;
@@ -262,22 +270,41 @@ async function createKnight() {
     knight = directionalKnight.getObject3D();
     console.log('Directional knight sprite created:', knight);
     
-    // Position knight outside the dungeon (to the left of the starting position)
-    const path = dungeonData.path;
-    const [startI, startJ] = path[0];
+    // Position knight one row above the door cell, facing Front
+    // Door is at position (6, 1) in expanded matrix, so knight starts at (5, 1)
+    const doorRow = WATER_ROWS_OFFSET; // 6 (where door is placed)
+    const doorCol = 1; // First column after left wall
+    const knightStartRow = doorRow - 1; // One row above door
+    const knightStartCol = doorCol; // Same column as door
     
     // Get expanded grid dimensions
-    const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
-    const expandedPos = getExpandedPosition(startI, startJ, dungeonData.input[0].length, expandedGridHeight);
+    const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+    const expandedGridWidth = dungeonData.input[0].length + (2 * WALL_PADDING);
     
-    // Place knight outside the dungeon (2 cells to the left)
-    knight.position.x = expandedPos.x - (cellSize * 2);
-    knight.position.y = expandedPos.y;
+    // Calculate knight's starting position
+    const knightX = knightStartCol * cellSize - (expandedGridWidth * cellSize) / 2;
+    const knightY = -knightStartRow * cellSize + (expandedGridHeight * cellSize) / 2;
+    
+    knight.position.x = knightX;
+    knight.position.y = knightY;
     knight.position.z = 15;
     
-    // Store the character controller and starting position for animations
+    // Store the character controller and positions for animations
     knight.characterController = directionalKnight;
+    
+    // Set initial Front orientation
+    knight.characterController.goIdle('Front');
+    
+    // Calculate target position (first room of original matrix)
+    const path = dungeonData.path;
+    const [startI, startJ] = path[0];
+    const expandedPos = getExpandedPosition(startI, startJ, dungeonData.input[0].length, expandedGridHeight);
     knight.startingPosition = { x: expandedPos.x, y: expandedPos.y, z: 15 };
+    
+    // Store intermediate position (door position) for the entrance sequence
+    const doorX = doorCol * cellSize - (expandedGridWidth * cellSize) / 2;
+    const doorY = -doorRow * cellSize + (expandedGridHeight * cellSize) / 2;
+    knight.doorPosition = { x: doorX, y: doorY, z: 15 };
     
     scene.add(knight);
     
@@ -301,7 +328,7 @@ async function createKnight() {
     const [i, j] = path[0];
     
     // Get expanded grid dimensions
-    const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+    const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
     const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
     
     knight.position.x = expandedPos.x;
@@ -320,9 +347,10 @@ function startAnimation() {
   document.getElementById('playBtn').disabled = true;
   document.getElementById('playBtn').textContent = '⏳ Rescue in Progress...';
   
-  // Reset knight to initial state (facing right) and position outside dungeon
+  // Reset knight to initial state (facing Front) and position
   if (knight.characterController) {
     knight.characterController.resetToInitialState();
+    knight.characterController.goIdle('Front');
   }
   
   // Reset power-up manager
@@ -332,6 +360,8 @@ function startAnimation() {
   if (environmentManager) {
     environmentManager.clearFloors(scene);
     environmentManager.createFloorsForDungeon(dungeonData.input, cellSize, scene);
+    // Reset door animation
+    environmentManager.resetDoorAnimation();
   }
   
   // Reset power-ups (recreate them)
@@ -351,9 +381,9 @@ function startAnimation() {
   }
   fightManager = new FightManager(scene, cellSize);
   
-  // Restore grid dimensions for enemy positioning (use expanded dimensions)
-  scene.userData.gridWidth = dungeonData.input[0].length;
-  scene.userData.gridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+  // Restore grid dimensions for enemy positioning (use expanded dimensions with walls)
+  scene.userData.gridWidth = dungeonData.input[0].length + (2 * WALL_PADDING);
+  scene.userData.gridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
   
   createEnemies(dungeonData.input);
   
@@ -362,44 +392,92 @@ function startAnimation() {
     knight.characterController.setCurrentPowerUp(null);
   }
   
-  // Position knight outside the dungeon for entrance
-  const path = dungeonData.path;
-  const [startI, startJ] = path[0];
+  // Position knight one row above the door cell, facing Front
+  // Door is at position (6, 1) in expanded matrix, so knight starts at (5, 1)
+  const doorRow = WATER_ROWS_OFFSET; // 6 (where door is placed)
+  const doorCol = 1; // First column after left wall
+  const knightStartRow = doorRow - 1; // One row above door
+  const knightStartCol = doorCol; // Same column as door
   
-  // Get expanded grid dimensions and position
-  const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
-  const expandedPos = getExpandedPosition(startI, startJ, dungeonData.input[0].length, expandedGridHeight);
+  // Get expanded grid dimensions
+  const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+  const expandedGridWidth = dungeonData.input[0].length + (2 * WALL_PADDING);
   
-  knight.position.x = expandedPos.x - (cellSize * 2);
-  knight.position.y = expandedPos.y;
+  // Calculate knight's starting position
+  const knightX = knightStartCol * cellSize - (expandedGridWidth * cellSize) / 2;
+  const knightY = -knightStartRow * cellSize + (expandedGridHeight * cellSize) / 2;
+  
+  knight.position.x = knightX;
+  knight.position.y = knightY;
   knight.position.z = 15;
   
-  // Store starting position
+  // Calculate target position (first room of original matrix)
+  const path = dungeonData.path;
+  const [startI, startJ] = path[0];
+  const expandedPos = getExpandedPosition(startI, startJ, dungeonData.input[0].length, expandedGridHeight);
   knight.startingPosition = { x: expandedPos.x, y: expandedPos.y, z: 15 };
+  
+  // Store intermediate position (door position) for the entrance sequence
+  const doorX = doorCol * cellSize - (expandedGridWidth * cellSize) / 2;
+  const doorY = -doorRow * cellSize + (expandedGridHeight * cellSize) / 2;
+  knight.doorPosition = { x: doorX, y: doorY, z: 15 };
   
   // Start entrance animation
   animateEntrance();
 }
 
 function animateEntrance() {
-  console.log('🚪 Knight entering the dungeon...');
+  console.log('🚪 Knight starting entrance sequence...');
   
-  // Start running animation facing right
+  // Reset knight to face Front initially
   if (knight.characterController) {
-    knight.characterController.startRunning('Right');
+    knight.characterController.resetToInitialState();
+    knight.characterController.goIdle('Front');
   }
   
-  // Animate entrance to the first position
-  const targetX = knight.startingPosition.x;
-  const targetY = knight.startingPosition.y;
-  const targetZ = knight.startingPosition.z;
+  // Stage 1: Move from current position to door position (moving down, facing Front)
+  animateToPosition(
+    knight.doorPosition,
+    'Front',
+    800,
+    () => {
+      console.log('🚪 Knight reached door position, moving to first room...');
+      
+      // Stage 2: Move from door position to starting room (still facing Front)
+      animateToPosition(
+        knight.startingPosition,
+        'Front',
+        800,
+        () => {
+          console.log('🚪 Knight reached starting room - triggering door animation!');
+          
+          // Now start door closing animation when knight reaches the first room
+          if (environmentManager) {
+            environmentManager.startDoorAnimation();
+          }
+          
+          // Brief pause before starting the main path
+          setTimeout(() => {
+            animatePath();
+          }, 500);
+        }
+      );
+    }
+  );
+}
+
+// Helper function to animate knight to a specific position
+function animateToPosition(targetPosition, direction, duration, onComplete) {
+  // Start movement animation in the specified direction
+  if (knight.characterController) {
+    knight.characterController.startRunning(direction);
+  }
   
   const startX = knight.position.x;
   const startY = knight.position.y;
-  const duration = 800; // Slightly longer entrance
   const startTime = Date.now();
   
-  function animateEntranceMove() {
+  function animateMove() {
     const elapsed = Date.now() - startTime;
     const progress = Math.min(elapsed / duration, 1);
     
@@ -408,24 +486,25 @@ function animateEntrance() {
       ? 2 * progress * progress 
       : 1 - Math.pow(-2 * progress + 2, 3) / 2;
     
-    knight.position.x = startX + (targetX - startX) * easeProgress;
-    knight.position.y = startY + (targetY - startY) * easeProgress;
-    knight.position.z = targetZ + Math.sin(progress * Math.PI) * 2;
+    knight.position.x = startX + (targetPosition.x - startX) * easeProgress;
+    knight.position.y = startY + (targetPosition.y - startY) * easeProgress;
+    knight.position.z = targetPosition.z + Math.sin(progress * Math.PI) * 2;
     
     if (progress < 1) {
-      requestAnimationFrame(animateEntranceMove);
+      requestAnimationFrame(animateMove);
     } else {
-      // Entrance complete, pause briefly then start dungeon traversal
-      console.log('✅ Knight has entered the dungeon!');
+      // Movement complete
+      knight.position.x = targetPosition.x;
+      knight.position.y = targetPosition.y;
+      knight.position.z = targetPosition.z;
       
-      // Brief pause before starting the main path
-      setTimeout(() => {
-        animatePath();
-      }, 300);
+      if (onComplete) {
+        onComplete();
+      }
     }
   }
   
-  animateEntranceMove();
+  animateMove();
 }
 
 function animatePath() {
@@ -442,10 +521,25 @@ function animatePath() {
       const isThreatRoom = roomValue < 0;
       
       // Determine movement direction based on path
-      let direction = 'Right'; // Default
+      let direction = 'Front'; // Default to Front for first movement and vertical movements
       if (step > 0) {
         const prevPos = path[step - 1];
         direction = knight.characterController.getDirectionFromMovement(prevPos, [i, j]);
+        
+        // Override direction logic to prefer Front for vertical movements
+        const deltaI = i - prevPos[0]; // Positive = moving down, Negative = moving up
+        const deltaJ = j - prevPos[1]; // Positive = moving right, Negative = moving left
+        
+        if (Math.abs(deltaI) > Math.abs(deltaJ)) {
+          // Vertical movement is dominant, use Front
+          direction = 'Front';
+        } else if (deltaJ > 0) {
+          // Horizontal movement to the right
+          direction = 'Right';
+        } else if (deltaJ < 0) {
+          // Horizontal movement to the left, use Front (since we don't have Left)
+          direction = 'Front';
+        }
       }
       
       // Start running animation for movement in the determined direction
@@ -454,7 +548,7 @@ function animatePath() {
       }
       
       // Animate knight movement
-      const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+      const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
       const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
       const targetX = expandedPos.x;
       const targetY = expandedPos.y;
@@ -490,14 +584,14 @@ function animatePath() {
           if (step > 1) {
             const [prevI, prevJ] = path[step - 2];
             if (environmentManager) {
-              const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
-              const expandedPrevI = prevI + WATER_ROWS_OFFSET;
+              const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+              const expandedPrevPos = getExpandedPosition(prevI, prevJ, dungeonData.input[0].length, expandedGridHeight);
               environmentManager.markCellAsVisited(
-                expandedPrevI, 
-                prevJ, 
+                expandedPrevPos.expandedI, 
+                expandedPrevPos.expandedJ, 
                 cellSize, 
                 scene, 
-                dungeonData.input[0].length, 
+                dungeonData.input[0].length + (2 * WALL_PADDING), 
                 expandedGridHeight
               );
             }
@@ -507,22 +601,23 @@ function animatePath() {
           if (isEnteringRoom) {
             console.log(`🏠 Knight entered room with value: ${roomValue}`);
             
-            // Convert original coordinates to expanded coordinates for enemy system
-            const expandedI = i + WATER_ROWS_OFFSET;
+            // Convert original coordinates to expanded coordinates for enemy system (including wall padding)
+            const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+            const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
             
             // Notify enemy manager if entering a threat room
             if (isThreatRoom) {
-              enemyManager.onKnightEntersRoom(expandedI, j, direction);
+              enemyManager.onKnightEntersRoom(expandedPos.expandedI, expandedPos.expandedJ, direction);
             }
             
             if (isThreatRoom) {
               // Threat room - check for enemy and start fight
               console.log('⚔️ Threat room detected - checking for enemy!');
               
-              const enemy = enemyManager.getEnemyAt(expandedI, j);
+              const enemy = enemyManager.getEnemyAt(expandedPos.expandedI, expandedPos.expandedJ);
               
               if (enemy && !enemy.isDead) {
-                console.log(`👻 Knight encounters enemy at expanded coordinates (${expandedI}, ${j})! Original: (${i}, ${j})`);
+                console.log(`👻 Knight encounters enemy at expanded coordinates (${expandedPos.expandedI}, ${expandedPos.expandedJ})! Original: (${i}, ${j})`);
                 
                 // Start fight
                 fightManager.startFight(
@@ -555,14 +650,15 @@ function animatePath() {
               // Power room - collect power-up and idle
               console.log('💪 Power room detected - collecting power-up');
               
-              // Convert original coordinates to expanded coordinates for power-up system
-              const expandedI = i + WATER_ROWS_OFFSET;
+              // Convert original coordinates to expanded coordinates for power-up system (including wall padding)
+              const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+              const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
               
               // Collect power-up
-              const collectedPowerUp = powerUpManager.collectPowerUp(expandedI, j);
+              const collectedPowerUp = powerUpManager.collectPowerUp(expandedPos.expandedI, expandedPos.expandedJ);
               
               if (collectedPowerUp) {
-                console.log(`💎 Collected power-up at expanded coordinates (${expandedI}, ${j})! Original: (${i}, ${j})`);
+                console.log(`💎 Collected power-up at expanded coordinates (${expandedPos.expandedI}, ${expandedPos.expandedJ})! Original: (${i}, ${j})`);
                 // Update knight's current power-up
                 knight.characterController.setCurrentPowerUp(collectedPowerUp);
                 
@@ -597,14 +693,14 @@ function animatePath() {
       if (path.length > 0) {
         const [finalI, finalJ] = path[path.length - 1];
         if (environmentManager) {
-          const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
-          const expandedFinalI = finalI + WATER_ROWS_OFFSET;
+          const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+          const expandedFinalPos = getExpandedPosition(finalI, finalJ, dungeonData.input[0].length, expandedGridHeight);
           environmentManager.markCellAsVisited(
-            expandedFinalI, 
-            finalJ, 
+            expandedFinalPos.expandedI, 
+            expandedFinalPos.expandedJ, 
             cellSize, 
             scene, 
-            dungeonData.input[0].length, 
+            dungeonData.input[0].length + (2 * WALL_PADDING), 
             expandedGridHeight
           );
         }
@@ -617,7 +713,7 @@ function animatePath() {
         
         // Reset knight position
         const [i, j] = path[0];
-        const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET;
+        const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
         const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
         
         knight.position.x = expandedPos.x;
