@@ -34,6 +34,11 @@ let cameraPosition = { x: 0, y: 0 };
 let isDragging = false;
 let lastMousePosition = { x: 0, y: 0 };
 
+// HP Tracking System
+let knightCurrentHP = 0;
+let knightMaxHP = 0;
+let hpNotifications = []; // Array to store active HP notifications
+
 init();
 
 async function init() {
@@ -118,6 +123,9 @@ async function init() {
   
   // Wait for Knight animations to load before enabling play button
   await createKnight();
+  
+  // Initialize HP tracking system
+  initializeHPTracker();
   
   // Initialize spell effect manager
   spellEffectManager = new SpellEffectManager();
@@ -340,12 +348,276 @@ async function createKnight() {
   }
 }
 
+// HP Tracking System Functions
+function initializeHPTracker() {
+  // Initialize knight's HP from dungeon data
+  knightMaxHP = dungeonData.min_hp;
+  knightCurrentHP = knightMaxHP;
+  
+  console.log(`🏥 Knight HP initialized: ${knightCurrentHP}/${knightMaxHP}`);
+  
+  // Update UI display
+  updateHPDisplay();
+}
+
+function updateHPDisplay() {
+  // Update HP in UI if there's an HP display element
+  const hpDisplay = document.getElementById('knightHP');
+  if (hpDisplay) {
+    hpDisplay.textContent = `HP: ${knightCurrentHP}/${knightMaxHP}`;
+  }
+}
+
+function updateKnightHP(hpChange, roomValue) {
+  // Update current HP
+  knightCurrentHP += hpChange;
+  
+  // Ensure HP doesn't go below 0
+  if (knightCurrentHP < 0) {
+    knightCurrentHP = 0;
+  }
+  
+  console.log(`🏥 Knight HP updated: ${hpChange > 0 ? '+' : ''}${hpChange} = ${knightCurrentHP}/${knightMaxHP}`);
+  
+  // Update display
+  updateHPDisplay();
+  
+  // Show HP notification
+  showHPNotification(hpChange, roomValue);
+  
+  // Check for game over
+  if (knightCurrentHP <= 0) {
+    console.log('💀 Knight has died!');
+    // Could add game over logic here
+  }
+}
+
+function showHPNotification(hpChange, roomValue) {
+  if (!knight) return;
+  
+  // Create text sprite for HP notification
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  canvas.width = 256;
+  canvas.height = 128;
+  
+  // Set up text style
+  context.font = 'Bold 48px Arial';
+  context.textAlign = 'center';
+  
+  // Choose color based on HP change
+  const isPositive = hpChange > 0;
+  context.fillStyle = isPositive ? '#00ff00' : '#ff0000'; // Green for positive, red for negative
+  
+  // Draw text with room value (show actual value with proper sign)
+  const text = `${isPositive ? '+' : ''}${roomValue}`;
+  context.fillText(text, 128, 80);
+  
+  // Create texture from canvas
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  
+  // Create sprite material
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 1.0
+  });
+  
+  // Create sprite
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(cellSize * 0.8, cellSize * 0.4, 1);
+  
+  // Position sprite above the knight
+  sprite.position.set(
+    knight.position.x + (Math.random() - 0.5) * cellSize * 0.3, // Small random offset
+    knight.position.y + cellSize * 0.8,
+    knight.position.z + 10
+  );
+  
+  scene.add(sprite);
+  
+  // Animate the notification
+  const startTime = Date.now();
+  const duration = 2000; // 2 seconds
+  const startY = sprite.position.y;
+  const targetY = startY + cellSize * 0.5; // Float upwards
+  
+  function animateNotification() {
+    const elapsed = Date.now() - startTime;
+    const progress = elapsed / duration;
+    
+    if (progress < 1) {
+      // Move upwards and fade out
+      sprite.position.y = startY + (targetY - startY) * progress;
+      sprite.material.opacity = 1 - progress;
+      
+      requestAnimationFrame(animateNotification);
+    } else {
+      // Remove sprite when animation is complete
+      scene.remove(sprite);
+      sprite.material.dispose();
+      sprite.material.map.dispose();
+      
+      // Remove from notifications array
+      const index = hpNotifications.indexOf(sprite);
+      if (index > -1) {
+        hpNotifications.splice(index, 1);
+      }
+    }
+  }
+  
+  // Store reference and start animation
+  hpNotifications.push(sprite);
+  animateNotification();
+}
+
+function resetHPTracker() {
+  // Clear all active notifications
+  hpNotifications.forEach(sprite => {
+    scene.remove(sprite);
+    sprite.material.dispose();
+    sprite.material.map.dispose();
+  });
+  hpNotifications = [];
+  
+  // Reset HP to initial values
+  knightCurrentHP = knightMaxHP;
+  updateHPDisplay();
+  
+  console.log('🏥 HP Tracker reset');
+}
+
+// Enemy Tracking System Functions
+function showCurrentEnemy(enemy, roomValue) {
+  console.log('👻 Showing current enemy in tracker');
+  
+  // Show the enemy tracker
+  document.getElementById('currentEnemy').style.display = 'block';
+  document.getElementById('emptyEnemySlot').style.display = 'none';
+  
+  // Extract first frame from enemy's Three.js texture
+  extractEnemyIcon(enemy);
+  
+  // Set enemy name (use the name attribute from the enemy)
+  const enemyName = enemy.name || 'Unknown';
+  document.getElementById('enemyName').textContent = enemyName;
+  
+  // Set enemy damage (use absolute value of room value as enemy damage)
+  const enemyDamage = Math.abs(roomValue);
+  document.getElementById('enemyDMG').textContent = `DMG: ${enemyDamage}`;
+  
+  const enemyType = getEnemyTypeFromInstance(enemy);
+  const enemySubType = getEnemySubTypeFromInstance(enemy);
+  console.log(`👻 Enemy tracker updated: ${enemyName} (${enemyType} ${enemySubType}) with ${enemyDamage} DMG`);
+}
+
+function extractEnemyIcon(enemy) {
+  // Wait for enemy sprite to be loaded, then extract first frame
+  if (enemy.sprite && enemy.sprite.material && enemy.sprite.material.map) {
+    const texture = enemy.sprite.material.map;
+    if (texture.image && texture.image.complete) {
+      // Create a canvas to extract the first frame
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Get frame information from the enemy instance
+      const framesPerRow = enemy.framesPerRow || enemy.animationFrames?.idle || 4; // Use enemy's framesPerRow or idle frames as fallback
+      const totalRows = 4; // All enemies have 4 rows for directions
+      
+      // Calculate frame dimensions
+      const frameWidth = texture.image.width / framesPerRow;
+      const frameHeight = texture.image.height / totalRows;
+      
+      canvas.width = frameWidth;
+      canvas.height = frameHeight;
+      
+      try {
+        // Draw the first frame (top-left corner)
+        ctx.drawImage(
+          texture.image,
+          0, 0, frameWidth, frameHeight, // Source: first frame
+          0, 0, frameWidth, frameHeight  // Destination: entire canvas
+        );
+        
+        // Convert canvas to data URL and set as enemy icon
+        const dataURL = canvas.toDataURL();
+        const enemyIcon = document.getElementById('enemyIcon');
+        enemyIcon.src = dataURL;
+        enemyIcon.alt = 'Enemy';
+        
+        console.log(`👻 Successfully extracted enemy icon from texture (${framesPerRow} columns, ${totalRows} rows)`);
+      } catch (error) {
+        console.warn('⚠️ Failed to extract enemy icon from texture, using fallback', error);
+        useEnemyIconFallback(enemy);
+      }
+    } else {
+      // Image not ready yet, try again
+      setTimeout(() => extractEnemyIcon(enemy), 100);
+    }
+  } else {
+    // Sprite not ready yet, try again
+    setTimeout(() => extractEnemyIcon(enemy), 100);
+  }
+}
+
+function useEnemyIconFallback(enemy) {
+  // Fallback: use the asset path directly
+  const enemyType = getEnemyTypeFromInstance(enemy);
+  const enemySubType = getEnemySubTypeFromInstance(enemy);
+  const iconPath = `./assets/enemies/${enemyType}/${enemySubType}/idle/full.png`;
+  
+  const enemyIcon = document.getElementById('enemyIcon');
+  enemyIcon.src = iconPath;
+  enemyIcon.alt = `${enemyType} ${enemySubType}`;
+  
+  console.log(`👻 Using fallback icon path: ${iconPath}`);
+}
+
+function hideCurrentEnemy() {
+  console.log('👻 Hiding current enemy from tracker');
+  
+  // Hide the enemy tracker
+  document.getElementById('currentEnemy').style.display = 'none';
+  document.getElementById('emptyEnemySlot').style.display = 'flex';
+}
+
+function getEnemyTypeFromInstance(enemy) {
+  // Determine enemy type from the enemy instance
+  if (enemy.constructor.name.includes('Ghost')) return 'ghost';
+  if (enemy.constructor.name.includes('Beholder')) return 'beholder';
+  if (enemy.constructor.name.includes('Demon')) return 'demon';
+  if (enemy.constructor.name.includes('Lich')) return 'lich';
+  return 'ghost'; // Default fallback
+}
+
+function getEnemySubTypeFromInstance(enemy) {
+  // Get the sub-type number from the enemy instance
+  if (enemy.ghostType) return enemy.ghostType;
+  if (enemy.beholderType) return enemy.beholderType;
+  if (enemy.demonType) return enemy.demonType;
+  if (enemy.lichType) return enemy.lichType;
+  return '1'; // Default fallback
+}
+
+function resetEnemyTracker() {
+  hideCurrentEnemy();
+  console.log('👻 Enemy Tracker reset');
+}
+
 function startAnimation() {
   if (isAnimating) return;
   
   isAnimating = true;
   document.getElementById('playBtn').disabled = true;
   document.getElementById('playBtn').textContent = '⏳ Rescue in Progress...';
+  
+  // Reset HP tracker
+  resetHPTracker();
+  
+  // Reset enemy tracker
+  resetEnemyTracker();
   
   // Reset knight to initial state (facing Front) and position
   if (knight.characterController) {
@@ -605,6 +877,11 @@ function animatePath() {
             const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
             const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
             
+            // For power rooms (positive values), update HP immediately
+            if (!isThreatRoom) {
+              updateKnightHP(roomValue, roomValue);
+            }
+            
             // Notify enemy manager if entering a threat room
             if (isThreatRoom) {
               enemyManager.onKnightEntersRoom(expandedPos.expandedI, expandedPos.expandedJ, direction);
@@ -619,6 +896,9 @@ function animatePath() {
               if (enemy && !enemy.isDead) {
                 console.log(`👻 Knight encounters enemy at expanded coordinates (${expandedPos.expandedI}, ${expandedPos.expandedJ})! Original: (${i}, ${j})`);
                 
+                // Show enemy in tracker
+                showCurrentEnemy(enemy, roomValue);
+                
                 // Start fight
                 fightManager.startFight(
                   knight.characterController,
@@ -629,6 +909,9 @@ function animatePath() {
                     enemy.isDead = true;
                     console.log(`✅ Fight completed! Enemy defeated.`);
                     
+                    // Hide enemy from tracker
+                    hideCurrentEnemy();
+                    
                     // Continue movement after fight
                     setTimeout(() => {
                       knight.characterController.goIdle(direction);
@@ -636,10 +919,16 @@ function animatePath() {
                         moveKnight(); // Continue after fight
                       }, 1000);
                     }, 500);
+                  },
+                  () => {
+                    // First enemy attack completed callback - trigger HP notification
+                    updateKnightHP(roomValue, roomValue);
                   }
                 );
               } else {
-                // No enemy or already dead - just continue
+                // No enemy or already dead - just continue but still apply HP damage
+                updateKnightHP(roomValue, roomValue);
+                
                 knight.characterController.goIdle(direction);
                 setTimeout(() => {
                   moveKnight(); // Continue after pause
