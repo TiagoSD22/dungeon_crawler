@@ -6,6 +6,7 @@ import { SpellEffectManager } from './SpellEffectManager.js';
 import { EnemyManager } from './EnemyManager.js';
 import { FightManager } from './FightManager.js';
 import { EnvironmentManager } from './EnvironmentManager.js';
+import { AnimatedPrincess } from './AnimatedPrincess.js';
 
 const cellSize = 120;
 const WATER_ROWS_OFFSET = 3; // Number of water rows added above the original dungeon
@@ -101,7 +102,7 @@ async function init() {
   environmentManager = new EnvironmentManager();
   environmentManager.createFloorsForDungeon(dungeonData.input, cellSize, scene);
   
-  createPrincess(dungeonData.input);
+  await createPrincess(dungeonData.input);
   
   // Initialize power-up manager
   powerUpManager = new PowerUpManager();
@@ -244,26 +245,54 @@ async function createEnemies(grid) {
   }
 }
 
-function createPrincess(grid) {
+async function createPrincess(grid) {
   // Place princess at the end of the path
   const path = dungeonData.path;
   const lastPosition = path[path.length - 1];
   const [i, j] = lastPosition;
   
-  princess = new THREE.Mesh(
-    new THREE.ConeGeometry(cellSize / 3, cellSize / 2, 8),
-    new THREE.MeshBasicMaterial({ color: 0xff69b4 })
-  );
+  // Create the animated princess
+  const animatedPrincess = new AnimatedPrincess(cellSize);
   
-  // Use expanded grid positioning
-  const expandedGridHeight = grid.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
-  const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
-  
-  princess.position.x = expandedPos.x;
-  princess.position.y = expandedPos.y;
-  princess.position.z = 10;
-  
-  scene.add(princess);
+  try {
+    console.log('👸 Loading princess animations...');
+    await animatedPrincess.initialize();
+    
+    princess = animatedPrincess.getObject3D();
+    princess.princessController = animatedPrincess; // Store reference for updates
+    
+    // Use expanded grid positioning
+    const expandedGridHeight = grid.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+    const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
+    
+    princess.position.x = expandedPos.x;
+    princess.position.y = expandedPos.y;
+    princess.position.z = 15; // Same Z level as knight
+    
+    scene.add(princess);
+    console.log('✅ Animated princess created successfully!');
+    
+  } catch (error) {
+    console.error('❌ Failed to load animated princess:', error);
+    
+    // Fallback to original triangle if sprite fails to load
+    console.log('Using fallback geometry for princess');
+    princess = new THREE.Mesh(
+      new THREE.ConeGeometry(cellSize / 3, cellSize / 2, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff69b4 })
+    );
+    
+    // Use expanded grid positioning
+    const expandedGridHeight = grid.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+    const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
+    
+    princess.position.x = expandedPos.x;
+    princess.position.y = expandedPos.y;
+    princess.position.z = 10;
+    
+    scene.add(princess);
+    console.log('Using fallback princess geometry');
+  }
 }
 
 async function createKnight() {
@@ -1042,6 +1071,11 @@ function animate() {
   // Update enemies
   if (enemyManager) {
     enemyManager.updateAllEnemies(0.016);
+  }
+  
+  // Update princess animation
+  if (princess && princess.princessController) {
+    princess.princessController.update(0.016);
   }
   
   // Update environment
