@@ -8,7 +8,7 @@ import { FightManager } from './FightManager.js';
 import { EnvironmentManager } from './EnvironmentManager.js';
 
 const cellSize = 120;
-const WATER_ROWS_OFFSET = 6; // Number of water rows added above the original dungeon
+const WATER_ROWS_OFFSET = 3; // Number of water rows added above the original dungeon
 const WALL_PADDING = 1; // Wall padding on all sides
 let scene, camera, renderer;
 
