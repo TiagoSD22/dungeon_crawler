@@ -18,7 +18,7 @@ export class FightManager {
   }
 
   // Start a fight between knight and enemy
-  async startFight(knight, enemy, knightDirection, onFightComplete) {
+  async startFight(knight, enemy, knightDirection, onFightComplete, onFirstEnemyAttackComplete = null) {
     if (this.isInFight) {
       console.log('⚠️ Fight already in progress');
       return;
@@ -35,7 +35,8 @@ export class FightManager {
       knightDirection,
       rounds,
       currentRound: 0,
-      onComplete: onFightComplete
+      onComplete: onFightComplete,
+      onFirstAttackComplete: onFirstEnemyAttackComplete
     };
 
     // Start the fight sequence
@@ -43,7 +44,7 @@ export class FightManager {
   }
 
   async executeFightSequence() {
-    const { knight, enemy, knightDirection, rounds } = this.currentFight;
+    const { knight, enemy, knightDirection, rounds, onFirstAttackComplete } = this.currentFight;
 
     // Wait for enemy positioning animation to complete before starting fight
     await this.wait(800); // Allow time for positioning animation
@@ -54,6 +55,12 @@ export class FightManager {
 
       // Enemy attacks first
       await this.executeEnemyAttack(enemy, knight, knightDirection);
+      
+      // After the first enemy attack, trigger HP notification
+      if (round === 1 && onFirstAttackComplete) {
+        console.log('🩸 First enemy attack completed - triggering HP notification');
+        onFirstAttackComplete();
+      }
       
       // Wait a moment between attacks
       await this.wait(500);
