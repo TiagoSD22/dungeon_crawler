@@ -82,6 +82,430 @@ export class SpellEffectManager {
     }
   }
 
+  // Play special boss attack effects
+  async playBossAttackEffect(bossPosition, direction = 'Left', onComplete = null) {
+    console.log(`🔥 Playing boss attack effect: Fire`);
+    
+    try {
+      // Create a special boss attack effect using the fire animation frames
+      const bossAttackEffect = await this.createBossAttackEffect();
+      
+      if (bossAttackEffect) {
+        // Position the boss attack effect (starts from boss position)
+        const attackPosition = this.calculateBossAttackPosition(bossPosition, direction);
+        bossAttackEffect.position.set(attackPosition.x, attackPosition.y, attackPosition.z);
+        
+        // Store movement data for horizontal animation (left to right)
+        bossAttackEffect.userData.startPosition = { ...attackPosition };
+        bossAttackEffect.userData.direction = direction;
+        bossAttackEffect.userData.movementProgress = 0;
+        
+        // Calculate target position for movement (same distance as queen blessing)
+        const targetPosition = this.calculateBossAttackTargetPosition(attackPosition, direction);
+        bossAttackEffect.userData.targetPosition = targetPosition;
+        
+        // Add to scene
+        this.scene.add(bossAttackEffect);
+        
+        // Play the boss attack animation with movement
+        this.playBossAttackAnimation(bossAttackEffect, () => {
+          // Remove from scene when complete
+          this.scene.remove(bossAttackEffect);
+          if (onComplete) onComplete();
+        });
+      } else {
+        console.warn(`⚠️ Failed to create boss attack effect`);
+        if (onComplete) onComplete();
+      }
+    } catch (error) {
+      console.error(`❌ Error playing boss attack effect:`, error);
+      if (onComplete) onComplete();
+    }
+  }
+  async playQueenBlessingEffect(blessingPowerUp, knightPosition, direction = 'Right', onComplete = null) {
+    console.log(`👑 Playing queen blessing effect: ${blessingPowerUp.name}`);
+    
+    try {
+      // Create a special blessing effect using the animation frames
+      const blessingEffect = await this.createBlessingEffect(blessingPowerUp);
+      
+      if (blessingEffect) {
+        // Position the blessing effect
+        const spellPosition = this.calculateSpellPosition(knightPosition, direction);
+        blessingEffect.position.set(spellPosition.x, spellPosition.y, spellPosition.z);
+        
+        // Store movement data for horizontal animation
+        blessingEffect.userData.startPosition = { ...spellPosition };
+        blessingEffect.userData.direction = direction;
+        blessingEffect.userData.moveDistance = 60; // Same as normal spells
+        blessingEffect.userData.movementProgress = 0;
+        
+        // Calculate target position for movement
+        const targetPosition = this.calculateBlessingTargetPosition(spellPosition, direction);
+        blessingEffect.userData.targetPosition = targetPosition;
+        
+        // Add to scene
+        this.scene.add(blessingEffect);
+        
+        // Play the blessing animation with movement
+        this.playBlessingAnimation(blessingEffect, blessingPowerUp, () => {
+          // Remove from scene when complete
+          this.scene.remove(blessingEffect);
+          if (onComplete) onComplete();
+        });
+      } else {
+        console.warn(`⚠️ Failed to create blessing effect for ${blessingPowerUp.name}`);
+        if (onComplete) onComplete();
+      }
+    } catch (error) {
+      console.error(`❌ Error playing blessing effect:`, error);
+      if (onComplete) onComplete();
+    }
+  }
+
+  async createBossAttackEffect() {
+    try {
+      // Load the first frame to create the sprite
+      const loader = new THREE.TextureLoader();
+      const firstFramePath = './assets/boss/attacks/fire1.png';
+      
+      const texture = await new Promise((resolve, reject) => {
+        loader.load(firstFramePath, resolve, undefined, reject);
+      });
+      
+      // Setup texture for pixel art
+      texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.NearestFilter;
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      
+      // Create sprite material
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.1
+      });
+      
+      // Create sprite
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(this.cellSize * 1.5, this.cellSize * 1.5, 1); // Same size as blessing effects
+      
+      // Store attack data for animation
+      sprite.userData = {
+        attackType: 'fire',
+        frameCount: 10, // fire1.png to fire10.png
+        animationPath: './assets/boss/attacks/',
+        currentFrame: 1
+      };
+      
+      return sprite;
+    } catch (error) {
+      console.error(`❌ Failed to create boss attack effect:`, error);
+      return null;
+    }
+  }
+
+  async createBlessingEffect(blessingPowerUp) {
+    try {
+      // Load the first frame to create the sprite with correct naming convention
+      const loader = new THREE.TextureLoader();
+      const firstFramePath = this.getBlessingFramePath(blessingPowerUp, 1);
+      
+      const texture = await new Promise((resolve, reject) => {
+        loader.load(firstFramePath, resolve, undefined, reject);
+      });
+      
+      // Setup texture for pixel art
+      texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.NearestFilter;
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      
+      // Create sprite material
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.1
+      });
+      
+      // Create sprite
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(this.cellSize * 1.5, this.cellSize * 1.5, 1); // Larger for dramatic effect
+      
+      // Store blessing data for animation
+      sprite.userData = {
+        blessingType: blessingPowerUp.type,
+        frameCount: blessingPowerUp.frameCount,
+        animationPath: blessingPowerUp.animationPath,
+        currentFrame: 1
+      };
+      
+      return sprite;
+    } catch (error) {
+      console.error(`❌ Failed to create blessing effect:`, error);
+      return null;
+    }
+  }
+
+  playBlessingAnimation(sprite, blessingPowerUp, onComplete) {
+    const frameCount = blessingPowerUp.frameCount;
+    const frameDuration = 60; // Faster animation - reduced from 100ms to 60ms
+    const totalAnimationTime = frameCount * frameDuration; // Total animation duration
+    let currentFrame = 1;
+    
+    const loader = new THREE.TextureLoader();
+    const startTime = Date.now();
+    
+    const playNextFrame = () => {
+      if (currentFrame <= frameCount) {
+        const framePath = this.getBlessingFramePath(blessingPowerUp, currentFrame);
+        
+        // Calculate movement progress based on time
+        const elapsed = Date.now() - startTime;
+        const movementProgress = Math.min(elapsed / totalAnimationTime, 1);
+        
+        // Update position for horizontal movement
+        if (sprite.userData.startPosition && sprite.userData.targetPosition) {
+          const startPos = sprite.userData.startPosition;
+          const targetPos = sprite.userData.targetPosition;
+          
+          const currentX = startPos.x + (targetPos.x - startPos.x) * movementProgress;
+          const currentY = startPos.y + (targetPos.y - startPos.y) * movementProgress;
+          const currentZ = startPos.z + (targetPos.z - startPos.z) * movementProgress;
+          
+          sprite.position.set(currentX, currentY, currentZ);
+        }
+        
+        loader.load(
+          framePath,
+          (texture) => {
+            // Setup texture
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            texture.wrapS = THREE.ClampToEdgeWrapping;
+            texture.wrapT = THREE.ClampToEdgeWrapping;
+            
+            // Update sprite material
+            if (sprite.material.map) {
+              sprite.material.map.dispose();
+            }
+            sprite.material.map = texture;
+            sprite.material.needsUpdate = true;
+            
+            currentFrame++;
+            setTimeout(playNextFrame, frameDuration);
+          },
+          undefined,
+          (error) => {
+            console.error(`❌ Failed to load frame ${currentFrame} from ${framePath}:`, error);
+            currentFrame++;
+            setTimeout(playNextFrame, frameDuration);
+          }
+        );
+      } else {
+        // Animation complete
+        console.log(`✨ Blessing animation completed for ${blessingPowerUp.name}`);
+        setTimeout(() => {
+          if (onComplete) onComplete();
+        }, 200);
+      }
+    };
+    
+    playNextFrame();
+  }
+
+  playBossAttackAnimation(sprite, onComplete) {
+    const frameCount = 10; // fire1.png to fire10.png
+    const frameDuration = 60; // Same speed as blessing animations
+    const totalAnimationTime = frameCount * frameDuration;
+    let currentFrame = 1;
+    
+    const loader = new THREE.TextureLoader();
+    const startTime = Date.now();
+    
+    const playNextFrame = () => {
+      if (currentFrame <= frameCount) {
+        const framePath = `./assets/boss/attacks/fire${currentFrame}.png`;
+        
+        // Calculate movement progress based on time
+        const elapsed = Date.now() - startTime;
+        const movementProgress = Math.min(elapsed / totalAnimationTime, 1);
+        
+        // Update position for horizontal movement (left to right)
+        if (sprite.userData.startPosition && sprite.userData.targetPosition) {
+          const startPos = sprite.userData.startPosition;
+          const targetPos = sprite.userData.targetPosition;
+          
+          const currentX = startPos.x + (targetPos.x - startPos.x) * movementProgress;
+          const currentY = startPos.y + (targetPos.y - startPos.y) * movementProgress;
+          const currentZ = startPos.z + (targetPos.z - startPos.z) * movementProgress;
+          
+          sprite.position.set(currentX, currentY, currentZ);
+        }
+        
+        loader.load(
+          framePath,
+          (texture) => {
+            // Setup texture
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            texture.wrapS = THREE.ClampToEdgeWrapping;
+            texture.wrapT = THREE.ClampToEdgeWrapping;
+            
+            // Update sprite material
+            if (sprite.material.map) {
+              sprite.material.map.dispose();
+            }
+            sprite.material.map = texture;
+            sprite.material.needsUpdate = true;
+            
+            currentFrame++;
+            setTimeout(playNextFrame, frameDuration);
+          },
+          undefined,
+          (error) => {
+            console.error(`❌ Failed to load boss attack frame ${currentFrame} from ${framePath}:`, error);
+            currentFrame++;
+            setTimeout(playNextFrame, frameDuration);
+          }
+        );
+      } else {
+        // Animation complete
+        console.log(`✨ Boss attack animation completed`);
+        setTimeout(() => {
+          if (onComplete) onComplete();
+        }, 200);
+      }
+    };
+    
+    playNextFrame();
+  }
+
+  // Calculate starting position for boss attack
+  calculateBossAttackPosition(bossPosition, direction) {
+    let offsetX = 0;
+    let offsetZ = 0;
+    let offsetY = 0;
+    
+    // Boss attacks from right to left (towards knight)
+    switch (direction) {
+      case 'Left':
+        offsetX = -30; // Start to the left of boss
+        break;
+      case 'Right':
+        offsetX = 30; // Start to the right of boss
+        break;
+      case 'Front':
+        offsetZ = 20;
+        offsetY = -20;
+        break;
+      case 'Back':
+        offsetZ = -30;
+        break;
+      default:
+        offsetX = -30; // Default to left
+    }
+    
+    return {
+      x: bossPosition.x + offsetX,
+      y: bossPosition.y + offsetY,
+      z: bossPosition.z + offsetZ + 5
+    };
+  }
+
+  // Calculate target position for boss attack movement
+  calculateBossAttackTargetPosition(startPosition, direction) {
+    const moveDistance = 200; // Same distance as blessing animations
+    
+    switch (direction) {
+      case 'Left':
+        return {
+          x: startPosition.x - moveDistance, // Move left (towards knight)
+          y: startPosition.y,
+          z: startPosition.z
+        };
+      case 'Right':
+        return {
+          x: startPosition.x + moveDistance,
+          y: startPosition.y,
+          z: startPosition.z
+        };
+      case 'Front':
+        return {
+          x: startPosition.x,
+          y: startPosition.y - moveDistance,
+          z: startPosition.z + moveDistance
+        };
+      case 'Back':
+        return {
+          x: startPosition.x,
+          y: startPosition.y,
+          z: startPosition.z - moveDistance
+        };
+      default:
+        return {
+          x: startPosition.x - moveDistance,
+          y: startPosition.y,
+          z: startPosition.z
+        };
+    }
+  }
+
+  // Calculate target position for blessing movement
+  calculateBlessingTargetPosition(startPosition, direction) {
+    const moveDistance = 220; // Increased distance to reach boss position
+    
+    switch (direction) {
+      case 'Right':
+        return {
+          x: startPosition.x + moveDistance,
+          y: startPosition.y +  10, // Slightly above ground
+          z: startPosition.z
+        };
+      case 'Front':
+        return {
+          x: startPosition.x,
+          y: startPosition.y - moveDistance,
+          z: startPosition.z + moveDistance
+        };
+      case 'Left':
+        return {
+          x: startPosition.x - moveDistance,
+          y: startPosition.y,
+          z: startPosition.z
+        };
+      case 'Back':
+        return {
+          x: startPosition.x,
+          y: startPosition.y,
+          z: startPosition.z - moveDistance
+        };
+      default:
+        return {
+          x: startPosition.x + moveDistance,
+          y: startPosition.y,
+          z: startPosition.z
+        };
+    }
+  }
+
+  // Helper method to get correct file path for each blessing type
+  getBlessingFramePath(blessingPowerUp, frameNumber) {
+    const basePath = blessingPowerUp.animationPath;
+    
+    switch (blessingPowerUp.type) {
+      case 'phoenix':
+        return `${basePath}phoenix_${frameNumber}.png`;
+      case 'kraken':
+        return `${basePath}${frameNumber}.png`;
+      case 'void':
+        return `${basePath}Smoke_scull${frameNumber}.png`;
+      default:
+        console.warn(`Unknown blessing type: ${blessingPowerUp.type}`);
+        return `${basePath}${frameNumber}.png`;
+    }
+  }
+
   calculateSpellPosition(knightPosition, direction) {
     let offsetX = 0;
     let offsetZ = 0;

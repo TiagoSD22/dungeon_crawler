@@ -475,4 +475,69 @@ export class DirectionalSpriteKnight {
       };
     });
   }
+
+  // Play special attack animation with queen's blessing
+  async playSpecialAttackAnimation() {
+    console.log(`⚔️ Knight attacks with queen's blessing!`);
+    
+    return new Promise((resolve) => {
+      // Use existing slashing animation
+      this.playAnimation('slashing');
+      
+      let blessingEffectComplete = false;
+      let knightAnimationComplete = false;
+      
+      const checkCompletion = () => {
+        if (blessingEffectComplete && knightAnimationComplete) {
+          resolve();
+        }
+      };
+      
+      // Cast special blessing effect if knight has a queen's blessing
+      if (this.currentPowerUp && this.currentPowerUp.isQueenBlessing && this.spellEffectManager) {
+        console.log(`👑 Knight attacking with ${this.currentPowerUp.name}!`);
+        
+        // Small delay to sync with attack animation
+        setTimeout(() => {
+          this.spellEffectManager.playQueenBlessingEffect(
+            this.currentPowerUp,
+            this.sprite.position,
+            this.currentDirection,
+            () => {
+              console.log(`✨ ${this.currentPowerUp.name} blessing effect completed`);
+              blessingEffectComplete = true;
+              checkCompletion();
+            }
+          );
+        }, 200); // 0.2 second delay
+      } else if (this.currentPowerUp && this.spellEffectManager) {
+        // Fallback to regular spell effect
+        setTimeout(() => {
+          this.spellEffectManager.playSpellEffect(
+            this.currentPowerUp.type || this.currentPowerUp,
+            this.sprite.position,
+            this.currentDirection,
+            () => {
+              console.log(`✨ Regular spell effect completed`);
+              blessingEffectComplete = true;
+              checkCompletion();
+            }
+          );
+        }, 200);
+      } else {
+        // No power-up, mark blessing as complete
+        blessingEffectComplete = true;
+      }
+
+      this.loop = false;
+      
+      // Set up completion callback for knight animation
+      this.onAnimationComplete = () => {
+        this.onAnimationComplete = null;
+        this.loop = true; // Reset loop for other animations
+        knightAnimationComplete = true;
+        checkCompletion();
+      };
+    });
+  }
 }
