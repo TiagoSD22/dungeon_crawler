@@ -17,7 +17,8 @@ export class EnvironmentManager {
       floorEntrance: null,
       highFloor: null,
       coffin: null,
-      statue: null
+      statue: null,
+      arch: null
     };
     this.isLoaded = false;
     this.floorSprites = [];
@@ -79,6 +80,7 @@ export class EnvironmentManager {
       this.entranceTextures.highFloor = await this.loadTexture(loader, './assets/environment/floors/high_floor.PNG');
       this.entranceTextures.coffin = await this.loadTexture(loader, './assets/environment/coffin.png');
       this.entranceTextures.statue = await this.loadTexture(loader, './assets/environment/statue.png');
+      this.entranceTextures.arch = await this.loadTexture(loader, './assets/environment/entrance_arch.png');
       
       this.isLoaded = true;
       console.log('✅ Environment textures loaded successfully!');
@@ -109,12 +111,12 @@ export class EnvironmentManager {
     });
   }
 
-  // Generate expanded matrix with 6 extra water rows at the top + wall padding
+  // Generate expanded matrix with 3 extra water rows at the top + wall padding
   generateExpandedMatrix(originalGrid) {
     const width = originalGrid[0].length;
-    const extraRows = 6;
+    const extraRows = 3;
     
-    // Create 6 rows of water environment (using value -999 to identify as water)
+    // Create 3 rows of water environment (using value -999 to identify as water)
     const waterRows = [];
     for (let i = 0; i < extraRows; i++) {
       const row = [];
@@ -136,17 +138,17 @@ export class EnvironmentManager {
     for (let i = 0; i < paddedHeight; i++) {
       const row = [];
       for (let j = 0; j < paddedWidth; j++) {
-        // Special case for door position: first column of the last row before the knight's line (last water row)
-        if (i === extraRows && j === 1) { // extraRows puts us at the first row of the original dungeon, j=1 is first column after left wall
-          row.push(-555); // Special value for door
+        // Special case for statue position: first interior row (row 1)
+        if (i === 1 && j === 1) { 
+          row.push(-444); // Special value for statue
         }
-        // Special case for knight starting position: entrance environment
-        else if (i === extraRows - 1 && j === 1) { // One row above door, same column
+        // Special case for knight starting position: second interior row (row 2)
+        else if (i === 2 && j === 1) { 
           row.push(-333); // Special value for knight entrance environment
         }
-        // Special case for statue position: two rows above door, same column
-        else if (i === extraRows - 2 && j === 1) { // Two rows above door, same column
-          row.push(-444); // Special value for statue
+        // Special case for door position: third interior row (row 3)
+        else if (i === 3 && j === 1) { 
+          row.push(-555); // Special value for door
         }
         // Check if this is a wall position
         else if (i === 0 || i === paddedHeight - 1 || j === 0 || j === paddedWidth - 1) {
@@ -521,6 +523,20 @@ export class EnvironmentManager {
     statueFloorSprite.position.set(x, y, -0.1); // Floor level, same as other floors
     scene.add(statueFloorSprite);
     this.entranceSprites.push(statueFloorSprite);
+    
+    // Add entrance arch behind the statue
+    const archMaterial = new THREE.SpriteMaterial({
+      map: this.entranceTextures.arch,
+      transparent: false,
+      alphaTest: 0.9,
+      //color: 0x505050 // Darken the arch slightly
+    });
+    
+    const archSprite = new THREE.Sprite(archMaterial);
+    archSprite.scale.set(cellSize * 1.2, cellSize * 1.2, 1); // Slightly larger than statue
+    archSprite.position.set(x, y, 0.05); // Behind statue (z=0.05 < statue's z=0.1)
+    scene.add(archSprite);
+    this.entranceSprites.push(archSprite);
     
     // Create animated statue sprite
     const statueMaterial = new THREE.SpriteMaterial({
