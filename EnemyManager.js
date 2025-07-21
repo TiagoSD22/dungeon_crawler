@@ -321,6 +321,7 @@ export class EnemyManager {
 
 class GhostEnemy {
   constructor(cellSize = 80, ghostType = 1, sizeMultiplier = 1.0) {
+    this.name = "Ghost";
     this.sprite = null;
     this.material = null;
     this.cellSize = cellSize;
@@ -776,6 +777,7 @@ class GhostEnemy {
 
 class BeholderEnemy {
   constructor(cellSize = 80, beholderType = 1, sizeMultiplier = 1.0) {
+    this.name = "Beholder";
     this.sprite = null;
     this.material = null;
     this.cellSize = cellSize;
@@ -1217,6 +1219,7 @@ class BeholderEnemy {
 
 class DemonEnemy {
   constructor(cellSize = 80, demonType = 1, sizeMultiplier = 1.3) {
+    this.name = "Demon";
     this.sprite = null;
     this.material = null;
     this.cellSize = cellSize;
@@ -1660,6 +1663,7 @@ class DemonEnemy {
 // Lich Enemy Class
 class LichEnemy {
   constructor(cellSize = 80, lichType = 1, sizeMultiplier = 1.0) {
+    this.name = "Lich";
     this.sprite = null;
     this.material = null;
     this.cellSize = cellSize;
