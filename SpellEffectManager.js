@@ -82,43 +82,19 @@ export class SpellEffectManager {
     }
   }
 
-  // Play special boss attack effects
-  async playBossAttackEffect(bossPosition, direction = 'Left', onComplete = null) {
-    console.log(`🔥 Playing boss attack effect: Fire`);
+  // Play special boss attack effects using the new boss special attack animations
+  async playBossAttackEffect(bossPosition, direction = 'Left', attackType = 'fire', onComplete = null) {
+    console.log(`🔥 Playing boss ${attackType} attack effect`);
     
     try {
-      // Create a special boss attack effect using the fire animation frames
-      const bossAttackEffect = await this.createBossAttackEffect();
-      
-      if (bossAttackEffect) {
-        // Position the boss attack effect (starts from boss position)
-        const attackPosition = this.calculateBossAttackPosition(bossPosition, direction);
-        bossAttackEffect.position.set(attackPosition.x, attackPosition.y, attackPosition.z);
-        
-        // Store movement data for horizontal animation (left to right)
-        bossAttackEffect.userData.startPosition = { ...attackPosition };
-        bossAttackEffect.userData.direction = direction;
-        bossAttackEffect.userData.movementProgress = 0;
-        
-        // Calculate target position for movement (same distance as queen blessing)
-        const targetPosition = this.calculateBossAttackTargetPosition(attackPosition, direction);
-        bossAttackEffect.userData.targetPosition = targetPosition;
-        
-        // Add to scene
-        this.scene.add(bossAttackEffect);
-        
-        // Play the boss attack animation with movement
-        this.playBossAttackAnimation(bossAttackEffect, () => {
-          // Remove from scene when complete
-          this.scene.remove(bossAttackEffect);
-          if (onComplete) onComplete();
-        });
-      } else {
-        console.warn(`⚠️ Failed to create boss attack effect`);
-        if (onComplete) onComplete();
+      // The boss will play its own special attack animation
+      // This method can be used for additional effects if needed
+      if (onComplete) {
+        // Small delay to sync with boss animation
+        setTimeout(onComplete, 500);
       }
     } catch (error) {
-      console.error(`❌ Error playing boss attack effect:`, error);
+      console.error(`❌ Error playing boss ${attackType} attack effect:`, error);
       if (onComplete) onComplete();
     }
   }
