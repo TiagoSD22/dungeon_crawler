@@ -164,14 +164,16 @@ export class FightManager {
     
     // Play enemy attack animation
     const attackPromise = enemy.playAttackAnimation(attackRow);
+
+    await this.wait(500);
     
     // For boss fights, also play special boss attack animation
     let bossAttackPromise = Promise.resolve();
-    if (isBossFight && knight.characterController && knight.characterController.spellEffectManager) {
+    if (isBossFight && knight.spellEffectManager) {
       console.log('🔥 Boss fight detected - playing special boss attack animation!');
       
       bossAttackPromise = new Promise((resolve) => {
-        knight.characterController.spellEffectManager.playBossAttackEffect(
+        knight.spellEffectManager.playBossAttackEffect(
           enemy.sprite.position, // Boss position
           'Left', // Boss attacks from right to left towards knight
           resolve
