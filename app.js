@@ -4,6 +4,7 @@ import { DirectionalSpriteKnight } from './DirectionalSpriteKnight.js';
 import { PowerUpManager } from './PowerUpManager.js';
 import { SpellEffectManager } from './SpellEffectManager.js';
 import { EnemyManager } from './EnemyManager.js';
+import { BossManager } from './BossManager.js';
 import { FightManager } from './FightManager.js';
 import { EnvironmentManager } from './EnvironmentManager.js';
 import { AnimatedPrincess } from './AnimatedPrincess.js';
@@ -27,6 +28,7 @@ let knight, princess;
 let powerUpManager;
 let spellEffectManager;
 let enemyManager;
+let bossManager;
 let fightManager;
 let environmentManager;
 let isAnimating = false;
@@ -117,6 +119,10 @@ async function init() {
   // Initialize enemy manager
   enemyManager = new EnemyManager();
   await enemyManager.initialize(scene);
+  
+  // Initialize boss manager
+  bossManager = new BossManager();
+  await bossManager.initialize(scene, cellSize);
   
   // Store grid dimensions for enemy positioning (use expanded dimensions with walls)
   scene.userData.gridWidth = dungeonData.input[0].length + (2 * WALL_PADDING);
@@ -222,12 +228,12 @@ async function createEnemies(grid) {
       if (roomValue < 0) {
         // Check if this is the final room with a threat
         if (i === finalI && j === finalJ && finalRoomValue < 0) {
-          // Special positioning for final room enemy (moved one cell left from previous position)
+          // Special positioning for final room boss (moved one cell left from previous position)
           const expandedFinalI = finalI + WATER_ROWS_OFFSET + WALL_PADDING;
           const expandedFinalJ = finalJ + WALL_PADDING + 4; // Position 4 rooms from the left (one cell left of previous position)
           
-          console.log(`🏰 Creating final room enemy at special position [${expandedFinalI}, ${expandedFinalJ}]`);
-          await enemyManager.createEnemyForRoom(expandedFinalI, expandedFinalJ, roomValue, cellSize, scene, grid[0].length + (2 * WALL_PADDING), expandedGridHeight);
+          console.log(`👹 Creating final room BOSS at special position [${expandedFinalI}, ${expandedFinalJ}]`);
+          await bossManager.createBossForRoom(expandedFinalI, expandedFinalJ, roomValue, cellSize, scene, grid[0].length + (2 * WALL_PADDING), expandedGridHeight, 1); // Boss ID 1
         } else {
           // Use standard positioning for regular threat rooms
           const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
@@ -654,7 +660,13 @@ function useEnemyIconFallback(enemy) {
   // Fallback: use the asset path directly
   const enemyType = getEnemyTypeFromInstance(enemy);
   const enemySubType = getEnemySubTypeFromInstance(enemy);
-  const iconPath = `./assets/enemies/${enemyType}/${enemySubType}/idle/full.png`;
+  
+  let iconPath;
+  if (enemyType === 'boss') {
+    iconPath = `./assets/boss/${enemySubType}/Idle1.png`;
+  } else {
+    iconPath = `./assets/enemies/${enemyType}/${enemySubType}/idle/full.png`;
+  }
   
   const enemyIcon = document.getElementById('enemyIcon');
   enemyIcon.src = iconPath;
@@ -673,6 +685,7 @@ function hideCurrentEnemy() {
 
 function getEnemyTypeFromInstance(enemy) {
   // Determine enemy type from the enemy instance
+  if (enemy.constructor.name.includes('Boss')) return 'boss';
   if (enemy.constructor.name.includes('Ghost')) return 'ghost';
   if (enemy.constructor.name.includes('Beholder')) return 'beholder';
   if (enemy.constructor.name.includes('Demon')) return 'demon';
@@ -682,6 +695,7 @@ function getEnemyTypeFromInstance(enemy) {
 
 function getEnemySubTypeFromInstance(enemy) {
   // Get the sub-type number from the enemy instance
+  if (enemy.bossId) return enemy.bossId;
   if (enemy.ghostType) return enemy.ghostType;
   if (enemy.beholderType) return enemy.beholderType;
   if (enemy.demonType) return enemy.demonType;
@@ -736,6 +750,12 @@ function startAnimation() {
   enemyManager.dispose();
   enemyManager = new EnemyManager();
   enemyManager.initialize(scene, cellSize);
+  
+  // Reset bosses (recreate them)
+  bossManager.removeFromScene(scene);
+  bossManager.dispose();
+  bossManager = new BossManager();
+  bossManager.initialize(scene, cellSize);
   
   // Reset fight manager
   if (fightManager) {
@@ -1291,7 +1311,7 @@ function createSpecialPowerUp(blessingType) {
 function startBossFight() {
   console.log('⚔️ Starting boss fight sequence...');
   
-  // Find the final enemy (boss)
+  // Find the final boss
   const path = dungeonData.path;
   const [finalI, finalJ] = path[path.length - 1];
   
@@ -1303,12 +1323,12 @@ function startBossFight() {
   const expandedFinalI = finalI + WATER_ROWS_OFFSET + WALL_PADDING;
   const expandedFinalJ = finalJ + WALL_PADDING + 4; // Same position as created in createEnemies
   
-  const boss = enemyManager.getEnemyAt(expandedFinalI, expandedFinalJ);
+  const boss = bossManager.getBossAt(expandedFinalI, expandedFinalJ);
   
   if (boss && !boss.isDead) {
     console.log(`👹 Boss found, starting 5-round fight! Boss damage: ${absBossDamage}`);
     
-    // Show enemy in tracker with actual boss damage
+    // Show boss in tracker with actual boss damage
     showCurrentEnemy(boss, bossDamage); // Use original negative value for display
     
     // Start special boss fight (5 rounds)
@@ -1604,6 +1624,11 @@ function animate() {
   // Update enemies
   if (enemyManager) {
     enemyManager.updateAllEnemies(0.016);
+  }
+  
+  // Update bosses
+  if (bossManager) {
+    bossManager.updateAllBosses(0.016);
   }
   
   // Update princess animation
