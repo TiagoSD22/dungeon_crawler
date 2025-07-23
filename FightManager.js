@@ -43,6 +43,78 @@ export class FightManager {
     await this.executeFightSequence();
   }
 
+  // Start a boss fight with fixed 5 rounds
+  async startBossFight(knight, boss, knightDirection, rounds, onBossFightComplete, onFirstBossAttackComplete = null) {
+    if (this.isInFight) {
+      console.log('⚠️ Fight already in progress');
+      return;
+    }
+    
+    this.isInFight = true;
+    
+    console.log(`👹 Boss fight started! Duration: ${rounds} rounds`);
+    
+    this.currentFight = {
+      knight,
+      enemy: boss,
+      knightDirection,
+      rounds,
+      currentRound: 0,
+      onComplete: onBossFightComplete,
+      onFirstAttackComplete: onFirstBossAttackComplete,
+      isBossFight: true
+    };
+
+    // Start the boss fight sequence
+    await this.executeBossFightSequence();
+  }
+
+  async executeBossFightSequence() {
+    const { knight, enemy: boss, knightDirection, rounds, onFirstAttackComplete } = this.currentFight;
+
+    // Wait for positioning before starting boss fight
+    await this.wait(800);
+
+    for (let round = 1; round <= rounds; round++) {
+      console.log(`👹 Boss Round ${round}/${rounds}`);
+      this.currentFight.currentRound = round;
+
+      // Boss attacks first (same as regular enemy attack)
+      await this.executeEnemyAttack(boss, knight, knightDirection);
+      
+      // After the first boss attack, trigger HP notification
+      if (round === 1 && onFirstAttackComplete) {
+        console.log('🩸 First boss attack completed - triggering HP notification');
+        onFirstAttackComplete();
+      }
+      
+      // Wait a moment between boss attack and knight counter-attack
+      await this.wait(800);
+      
+      // Knight counter-attacks with special blessing power
+      await this.executeSpecialKnightAttack(knight, boss, knightDirection);
+      
+      // Wait for knight blessing animation to complete before next round
+      if (round < rounds) {
+        await this.wait(1500); // Longer wait to ensure blessing animation completes
+      }
+    }
+
+    // Boss fight is over - complete without death animation (handled by dialog)
+    this.completeFight();
+  }
+
+  async executeSpecialKnightAttack(knight, enemy, knightDirection) {
+    console.log(`⚔️ Knight attacks with queen's blessing!`);
+    
+    // Play knight attack animation with special blessing effects
+    // Wait for knight attack animation to complete, which includes blessing effect
+    await knight.playSpecialAttackAnimation();
+    
+    // Then play enemy hurt animation
+    await this.playEnemyHurtAnimation(enemy, knightDirection);
+  }
+
   async executeFightSequence() {
     const { knight, enemy, knightDirection, rounds, onFirstAttackComplete } = this.currentFight;
 
@@ -84,16 +156,36 @@ export class FightManager {
   async executeEnemyAttack(enemy, knight, knightDirection) {
     console.log(`👻 Enemy attacks knight!`);
     
+    // Check if this is a boss fight
+    const isBossFight = this.currentFight && this.currentFight.isBossFight;
+    
     // Determine enemy attack animation row based on knight direction
     const attackRow = this.getEnemyAnimationRow(knightDirection);
     
-    // Play enemy attack animation and knight hurt animation simultaneously
+    // Play enemy attack animation
     const attackPromise = enemy.playAttackAnimation(attackRow);
+
+    await this.wait(500);
+    
+    // For boss fights, also play special boss attack animation
+    let bossAttackPromise = Promise.resolve();
+    if (isBossFight && knight.spellEffectManager) {
+      console.log('🔥 Boss fight detected - playing special boss attack animation!');
+      
+      bossAttackPromise = new Promise((resolve) => {
+        knight.spellEffectManager.playBossAttackEffect(
+          enemy.sprite.position, // Boss position
+          'Left', // Boss attacks from right to left towards knight
+          resolve
+        );
+      });
+    }
+    
     await this.wait(500);
     const hurtPromise = this.playKnightHurtAnimation(knight, knightDirection);
     
-    // Wait for both animations to complete
-    await Promise.all([attackPromise, hurtPromise]);
+    // Wait for all animations to complete
+    await Promise.all([attackPromise, bossAttackPromise, hurtPromise]);
   }
 
   async executeKnightAttack(knight, enemy, knightDirection) {

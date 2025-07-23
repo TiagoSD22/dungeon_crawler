@@ -98,8 +98,14 @@ async function init() {
   createDungeon(dungeonData.input);
   // createGridLines(dungeonData.input); // Disabled grid lines to show floor textures clearly
   
-  // Initialize environment manager and create floors
+  // Initialize environment manager
   environmentManager = new EnvironmentManager();
+  await environmentManager.initialize(); // Load textures before using them
+  
+  // Pre-register special final room coordinates before creating floors
+  environmentManager.preRegisterSpecialFinalRoom(dungeonData.input, dungeonData.path);
+  
+  // Create floors (will skip special final room coordinates)
   environmentManager.createFloorsForDungeon(dungeonData.input, cellSize, scene);
   
   await createPrincess(dungeonData.input);
@@ -205,14 +211,28 @@ async function createEnemies(grid) {
   console.log('👻 Creating enemies for threat rooms...');
   
   const expandedGridHeight = grid.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+  const path = dungeonData.path;
+  const lastPosition = path[path.length - 1];
+  const [finalI, finalJ] = lastPosition;
+  const finalRoomValue = grid[finalI][finalJ];
   
   for (let i = 0; i < grid.length; i++) {
     for (let j = 0; j < grid[i].length; j++) {
       const roomValue = grid[i][j];
       if (roomValue < 0) {
-        // Use expanded coordinates for enemy positioning with wall padding
-        const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
-        await enemyManager.createEnemyForRoom(expandedPos.expandedI, expandedPos.expandedJ, roomValue, cellSize, scene, grid[0].length + (2 * WALL_PADDING), expandedGridHeight);
+        // Check if this is the final room with a threat
+        if (i === finalI && j === finalJ && finalRoomValue < 0) {
+          // Special positioning for final room enemy (moved one cell left from previous position)
+          const expandedFinalI = finalI + WATER_ROWS_OFFSET + WALL_PADDING;
+          const expandedFinalJ = finalJ + WALL_PADDING + 4; // Position 4 rooms from the left (one cell left of previous position)
+          
+          console.log(`🏰 Creating final room enemy at special position [${expandedFinalI}, ${expandedFinalJ}]`);
+          await enemyManager.createEnemyForRoom(expandedFinalI, expandedFinalJ, roomValue, cellSize, scene, grid[0].length + (2 * WALL_PADDING), expandedGridHeight);
+        } else {
+          // Use standard positioning for regular threat rooms
+          const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
+          await enemyManager.createEnemyForRoom(expandedPos.expandedI, expandedPos.expandedJ, roomValue, cellSize, scene, grid[0].length + (2 * WALL_PADDING), expandedGridHeight);
+        }
       }
     }
   }
@@ -246,10 +266,21 @@ async function createEnemies(grid) {
 }
 
 async function createPrincess(grid) {
+  console.log('👸 createPrincess function called');
+  
   // Place princess at the end of the path
   const path = dungeonData.path;
   const lastPosition = path[path.length - 1];
   const [i, j] = lastPosition;
+  const finalRoomValue = grid[i][j];
+  
+  console.log('👸 Princess path info:', { path, lastPosition, finalRoomValue });
+  console.log('👸 About to call createSpecialFinalRoom...');
+  
+  // Create special final room environment
+  const specialRoom = await environmentManager.createSpecialFinalRoom(grid, cellSize, scene, path);
+  
+  console.log('👸 Special room result:', specialRoom);
   
   // Create the animated princess
   const animatedPrincess = new AnimatedPrincess(cellSize);
@@ -261,13 +292,28 @@ async function createPrincess(grid) {
     princess = animatedPrincess.getObject3D();
     princess.princessController = animatedPrincess; // Store reference for updates
     
-    // Use expanded grid positioning
+    // Position princess at the right end of the special final room
     const expandedGridHeight = grid.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
-    const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
+    const expandedGridWidth = grid[0].length + (2 * WALL_PADDING);
     
-    princess.position.x = expandedPos.x;
-    princess.position.y = expandedPos.y;
-    princess.position.z = 15; // Same Z level as knight
+    if (specialRoom) {
+      // Place princess at the rightmost part of the special final room, moved one cell left
+      const princessJ = specialRoom.finalJ + specialRoom.finalRoomWidth - 2; // One cell left from rightmost
+      const princessX = princessJ * cellSize - (expandedGridWidth * cellSize) / 2;
+      const princessY = -specialRoom.finalI * cellSize + (expandedGridHeight * cellSize) / 2 + 10; // Slightly above the floor
+      
+      princess.position.x = princessX;
+      princess.position.y = princessY;
+      princess.position.z = 15; // Same Z level as knight
+      
+      console.log(`👸 Princess positioned at special final room: (${princessX}, ${princessY})`);
+    } else {
+      // Fallback to original positioning
+      const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
+      princess.position.x = expandedPos.x;
+      princess.position.y = expandedPos.y;
+      princess.position.z = 15;
+    }
     
     scene.add(princess);
     console.log('✅ Animated princess created successfully!');
@@ -282,14 +328,27 @@ async function createPrincess(grid) {
       new THREE.MeshBasicMaterial({ color: 0xff69b4 })
     );
     
-    // Use expanded grid positioning
+    // Use same positioning logic as above
     const expandedGridHeight = grid.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
-    const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
+    const expandedGridWidth = grid[0].length + (2 * WALL_PADDING);
     
-    princess.position.x = expandedPos.x;
-    princess.position.y = expandedPos.y;
-    princess.position.z = 10;
+    if (specialRoom) {
+      const princessJ = specialRoom.finalJ + specialRoom.finalRoomWidth - 2; // One cell left from rightmost  
+      const princessX = princessJ * cellSize - (expandedGridWidth * cellSize) / 2;
+      const princessY = -specialRoom.finalI * cellSize + (expandedGridHeight * cellSize) / 2;
+      
+      princess.position.x = princessX;
+      princess.position.y = princessY;
+      princess.position.z = 10;
+    } else {
+      const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
+      princess.position.x = expandedPos.x;
+      princess.position.y = expandedPos.y;
+      princess.position.z = 10;
+    }
     
+    scene.add(princess);
+    console.log('Using fallback princess geometry');
     scene.add(princess);
     console.log('Using fallback princess geometry');
   }
@@ -660,6 +719,8 @@ function startAnimation() {
   // Reset floors
   if (environmentManager) {
     environmentManager.clearFloors(scene);
+    // Pre-register special final room coordinates again before recreating floors
+    environmentManager.preRegisterSpecialFinalRoom(dungeonData.input, dungeonData.path);
     environmentManager.createFloorsForDungeon(dungeonData.input, cellSize, scene);
     // Reset door animation
     environmentManager.resetDoorAnimation();
@@ -1007,7 +1068,7 @@ function animatePath() {
       
       animateMove();
     } else {
-      // Animation complete - mark final cell as visited
+      // Animation complete - mark final cell as visited and start special final room sequence
       if (path.length > 0) {
         const [finalI, finalJ] = path[path.length - 1];
         if (environmentManager) {
@@ -1022,26 +1083,498 @@ function animatePath() {
             expandedGridHeight
           );
         }
+        
+        // Start special final room sequence: turn right and move into special room
+        startFinalRoomSequence();
+      } else {
+        // Fallback if no path
+        setTimeout(() => {
+          document.getElementById('playBtn').disabled = false;
+          document.getElementById('playBtn').textContent = '🔄 Restart Rescue Mission';
+          isAnimating = false;
+        }, 1000);
       }
-      
-      setTimeout(() => {
-        document.getElementById('playBtn').disabled = false;
-        document.getElementById('playBtn').textContent = '🔄 Restart Rescue Mission';
-        isAnimating = false;
-        
-        // Reset knight position
-        const [i, j] = path[0];
-        const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
-        const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
-        
-        knight.position.x = expandedPos.x;
-        knight.position.y = expandedPos.y;
-        knight.position.z = 15;
-      }, 1000);
     }
   }
 
   moveKnight();
+}
+
+// Special final room sequence
+function startFinalRoomSequence() {
+  console.log('🏰 Starting special final room sequence...');
+  
+  // Get final room value to determine if it's a threat room
+  const path = dungeonData.path;
+  const [finalI, finalJ] = path[path.length - 1];
+  const finalRoomValue = dungeonData.input[finalI][finalJ];
+  const isThreatRoom = finalRoomValue < 0;
+  
+  console.log(`🏰 Final room value: ${finalRoomValue}, is threat room: ${isThreatRoom}`);
+  
+  // Step 1: Turn knight to face Right
+  if (knight.characterController) {
+    knight.characterController.goIdle('Right');
+  }
+  
+  // Step 2: After a brief pause, start moving right into the special room
+  setTimeout(() => {
+    if (knight.characterController) {
+      knight.characterController.startRunning('Right');
+    }
+    
+    // Calculate target position: 2 cells to the right
+    const targetX = knight.position.x + (cellSize * 2);
+    const targetY = knight.position.y;
+    
+    // Animate movement to special room
+    animateToPosition(
+      { x: targetX, y: targetY, z: 15 },
+      'Right',
+      1000, // 1 second movement
+      () => {
+        console.log('🏰 Knight reached special final room position');
+        
+        // Stop at idle position
+        if (knight.characterController) {
+          knight.characterController.goIdle('Right');
+        }
+        
+        // Branch based on room type
+        if (isThreatRoom) {
+          // Threat room: Start queen blessing sequence (leads to boss fight)
+          setTimeout(() => {
+            startQueenBlessing();
+          }, 500);
+        } else {
+          // Non-threat room: Go directly to princess (treasure room)
+          setTimeout(() => {
+            moveKnightToPrincess();
+          }, 500);
+        }
+      }
+    );
+  }, 500);
+}
+
+// Queen blessing system
+function startQueenBlessing() {
+  console.log('👑 Starting queen blessing sequence...');
+  
+  // Start queen blessing animation
+  if (princess && princess.princessController) {
+    princess.princessController.startBlessingAnimation();
+  }
+  
+  // Show blessing dialog after animation completes
+  setTimeout(() => {
+    showBlessingDialog();
+  }, 2000); // Adjust timing based on animation length
+}
+
+function showBlessingDialog() {
+  // Create blessing dialog
+  const dialog = document.createElement('div');
+  dialog.className = 'blessing-dialog';
+  dialog.innerHTML = `
+    <div class="dialog-content">
+      <div class="dialog-text">
+        <strong>Queen:</strong> I give you my bless my brave knight!
+      </div>
+      <button id="blessingNextBtn" class="dialog-button">Next</button>
+    </div>
+  `;
+  
+  // Add styling
+  dialog.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    border: 2px solid gold;
+    z-index: 1000;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  `;
+  
+  const content = dialog.querySelector('.dialog-content');
+  content.style.cssText = `
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+  `;
+  
+  const button = dialog.querySelector('#blessingNextBtn');
+  button.style.cssText = `
+    padding: 10px 20px;
+    background: gold;
+    color: black;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+  `;
+  
+  button.addEventListener('click', () => {
+    document.body.removeChild(dialog);
+    grantRandomBlessing();
+  });
+  
+  document.body.appendChild(dialog);
+}
+
+function grantRandomBlessing() {
+  const blessings = ["Phoenix", "Kraken", "Void"];
+  const chosenBlessing = blessings[Math.floor(Math.random() * blessings.length)];
+  
+  console.log(`👑 Queen grants ${chosenBlessing} blessing!`);
+  
+  // Reset queen to idle animation
+  if (princess && princess.princessController) {
+    princess.princessController.goIdle();
+  }
+  
+  // Set the special power-up based on blessing
+  const specialPowerUp = createSpecialPowerUp(chosenBlessing);
+  
+  // Update knight's current power-up
+  if (knight.characterController) {
+    knight.characterController.setCurrentPowerUp(specialPowerUp);
+  }
+  
+  // Update power-up tracker display
+  powerUpManager.setCurrentPowerUp(specialPowerUp);
+  
+  // Start boss fight sequence
+  setTimeout(() => {
+    startBossFight();
+  }, 1000);
+}
+
+function createSpecialPowerUp(blessingType) {
+  const powerUpData = {
+    type: blessingType.toLowerCase(),
+    name: `Queen's ${blessingType} Blessing`,
+    damage: 50, // Special high damage for queen's blessing
+    isQueenBlessing: true
+  };
+  
+  // Set icon based on blessing type
+  switch (blessingType) {
+    case "Phoenix":
+      powerUpData.iconPath = './assets/queen_blesses/Phoenix/phoenix_10.png';
+      powerUpData.animationPath = './assets/queen_blesses/Phoenix/';
+      powerUpData.frameCount = 16;
+      break;
+    case "Kraken":
+      powerUpData.iconPath = './assets/queen_blesses/Kraken/9.png';
+      powerUpData.animationPath = './assets/queen_blesses/Kraken/';
+      powerUpData.frameCount = 19;
+      break;
+    case "Void":
+      powerUpData.iconPath = './assets/queen_blesses/Plague/Smoke_scull13.png';
+      powerUpData.animationPath = './assets/queen_blesses/Plague/';
+      powerUpData.frameCount = 20;
+      break;
+  }
+  
+  return powerUpData;
+}
+
+function startBossFight() {
+  console.log('⚔️ Starting boss fight sequence...');
+  
+  // Find the final enemy (boss)
+  const path = dungeonData.path;
+  const [finalI, finalJ] = path[path.length - 1];
+  
+  // Get the actual boss damage from the last room value in original dungeon
+  const bossDamage = dungeonData.input[finalI][finalJ]; // This will be negative (e.g., -15)
+  const absBossDamage = Math.abs(bossDamage); // Convert to positive for damage calculation
+  
+  const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+  const expandedFinalI = finalI + WATER_ROWS_OFFSET + WALL_PADDING;
+  const expandedFinalJ = finalJ + WALL_PADDING + 4; // Same position as created in createEnemies
+  
+  const boss = enemyManager.getEnemyAt(expandedFinalI, expandedFinalJ);
+  
+  if (boss && !boss.isDead) {
+    console.log(`👹 Boss found, starting 5-round fight! Boss damage: ${absBossDamage}`);
+    
+    // Show enemy in tracker with actual boss damage
+    showCurrentEnemy(boss, bossDamage); // Use original negative value for display
+    
+    // Start special boss fight (5 rounds)
+    fightManager.startBossFight(
+      knight.characterController,
+      boss,
+      'Right',
+      5, // 5 rounds
+      () => {
+        // Boss fight completed callback
+        showBossDefeatDialog(boss);
+      },
+      () => {
+        // First boss attack completed callback - trigger HP notification ONCE
+        updateKnightHP(bossDamage, bossDamage); // Use actual boss damage value
+      }
+    );
+  } else {
+    console.warn('⚠️ Boss not found, skipping boss fight');
+    completeFinalSequence();
+  }
+}
+
+function showBossDefeatDialog(boss) {
+  // Create boss defeat dialog
+  const dialog = document.createElement('div');
+  dialog.className = 'boss-defeat-dialog';
+  
+  // Get boss icon (same as enemy tracker)
+  const bossIconSrc = document.getElementById('enemyIcon').src;
+  
+  dialog.innerHTML = `
+    <div class="dialog-content">
+      <img src="${bossIconSrc}" alt="Boss" style="width: 64px; height: 64px; image-rendering: pixelated;">
+      <div class="dialog-text">
+        <strong>Boss:</strong> Finally a worthy opponent...
+      </div>
+      <button id="bossDefeatNextBtn" class="dialog-button">Next</button>
+    </div>
+  `;
+  
+  // Add styling
+  dialog.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    border: 2px solid red;
+    z-index: 1000;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+  `;
+  
+  const content = dialog.querySelector('.dialog-content');
+  content.style.cssText = `
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+  `;
+  
+  const button = dialog.querySelector('#bossDefeatNextBtn');
+  button.style.cssText = `
+    padding: 10px 20px;
+    background: red;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+  `;
+  
+  button.addEventListener('click', () => {
+    document.body.removeChild(dialog);
+    
+    // Mark boss as dead and play death animation
+    boss.isDead = true;
+    
+    // Hide enemy from tracker
+    hideCurrentEnemy();
+    
+    // Play boss death animation and wait for it to complete
+    if (boss.playDeathAnimation) {
+      console.log('💀 Playing boss death animation...');
+      
+      // Play death animation and wait for completion
+      boss.playDeathAnimation().then(() => {
+        console.log('💀 Boss death animation completed - removing from scene');
+        
+        // Remove boss from scene after death animation completes
+        if (boss.removeFromScene) {
+          boss.removeFromScene();
+        }
+        
+        // Move knight closer to princess after boss is removed
+        setTimeout(() => {
+          moveKnightToPrincess();
+        }, 500);
+      }).catch((error) => {
+        console.error('❌ Error during boss death animation:', error);
+        
+        // Fallback: still remove boss and continue
+        if (boss.removeFromScene) {
+          boss.removeFromScene();
+        }
+        
+        setTimeout(() => {
+          moveKnightToPrincess();
+        }, 500);
+      });
+    } else {
+      // No death animation available, just remove and continue
+      console.log('⚠️ No death animation available for boss, removing immediately');
+      
+      if (boss.removeFromScene) {
+        boss.removeFromScene();
+      }
+      
+      setTimeout(() => {
+        moveKnightToPrincess();
+      }, 500);
+    }
+  });
+  
+  document.body.appendChild(dialog);
+}
+
+function moveKnightToPrincess() {
+  console.log('💖 Moving knight to princess...');
+  
+  // Calculate princess position (she should be one cell to the right of current knight position)
+  const targetX = knight.position.x + cellSize;
+  const targetY = knight.position.y;
+  
+  // Animate knight movement to princess
+  if (knight.characterController) {
+    knight.characterController.startRunning('Right');
+  }
+  
+  animateToPosition(
+    { x: targetX, y: targetY, z: 15 },
+    'Right',
+    800,
+    () => {
+      // Knight reached princess, go idle
+      if (knight.characterController) {
+        knight.characterController.goIdle('Right');
+      }
+      
+      // Show queen's thanks dialog
+      setTimeout(() => {
+        showQueenThanksDialog();
+      }, 500);
+    }
+  );
+}
+
+function showQueenThanksDialog() {
+  // Create queen thanks dialog
+  const dialog = document.createElement('div');
+  dialog.className = 'queen-thanks-dialog';
+  dialog.innerHTML = `
+    <div class="dialog-content">
+      <div class="dialog-text">
+        <strong>Queen:</strong> Thanks for saving me my brave knight!
+      </div>
+      <button id="queenThanksCloseBtn" class="dialog-button">Close</button>
+    </div>
+  `;
+  
+  // Add styling
+  dialog.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    border: 2px solid gold;
+    z-index: 1000;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  `;
+  
+  const content = dialog.querySelector('.dialog-content');
+  content.style.cssText = `
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+  `;
+  
+  const button = dialog.querySelector('#queenThanksCloseBtn');
+  button.style.cssText = `
+    padding: 10px 20px;
+    background: gold;
+    color: black;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+  `;
+  
+  button.addEventListener('click', () => {
+    document.body.removeChild(dialog);
+    
+    // Trigger restart rescue process immediately
+    restartRescueProcess();
+  });
+  
+  document.body.appendChild(dialog);
+}
+
+function restartRescueProcess() {
+  console.log('🔄 Restarting rescue process...');
+  
+  // Enable restart button and trigger restart
+  document.getElementById('playBtn').disabled = false;
+  document.getElementById('playBtn').textContent = '🔄 Restart Rescue Mission';
+  isAnimating = false;
+  
+  // Reset knight position for next run
+  const path = dungeonData.path;
+  const [i, j] = path[0];
+  const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+  const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
+  
+  knight.position.x = expandedPos.x;
+  knight.position.y = expandedPos.y;
+  knight.position.z = 15;
+  
+  // Reset knight to front orientation
+  if (knight.characterController) {
+    knight.characterController.goIdle('Front');
+  }
+}
+
+function completeFinalSequence() {
+  console.log('✅ Rescue mission completed!');
+  
+  // Enable restart button
+  setTimeout(() => {
+    document.getElementById('playBtn').disabled = false;
+    document.getElementById('playBtn').textContent = '🔄 Restart Rescue Mission';
+    isAnimating = false;
+    
+    // Reset knight position for next run
+    const path = dungeonData.path;
+    const [i, j] = path[0];
+    const expandedGridHeight = dungeonData.input.length + WATER_ROWS_OFFSET + (2 * WALL_PADDING);
+    const expandedPos = getExpandedPosition(i, j, dungeonData.input[0].length, expandedGridHeight);
+    
+    knight.position.x = expandedPos.x;
+    knight.position.y = expandedPos.y;
+    knight.position.z = 15;
+  }, 2000);
 }
 
 function animate() {

@@ -26,6 +26,8 @@ export class EnvironmentManager {
     this.entranceSprites = []; // Store entrance environment sprites
     this.visitedCells = new Set(); // Track visited cells
     this.darkOverlays = []; // Store dark overlays for visited cells
+    this.specialFinalRoomCoords = new Set(); // Track special final room coordinates
+    this.specialRoomSprites = []; // Store special room sprites separately (not cleared with regular floors)
     
     // Door animation properties
     this.doorSprite = null;
@@ -44,7 +46,13 @@ export class EnvironmentManager {
     this.statueFrameCount = 6;
     
     // Load all floor textures
-    this.loadTextures();
+    // Note: loadTextures() will be called from initialize() method
+  }
+
+  // Initialize method to properly await texture loading
+  async initialize() {
+    await this.loadTextures();
+    return this.isLoaded;
   }
 
   async loadTextures() {
@@ -81,6 +89,10 @@ export class EnvironmentManager {
       this.entranceTextures.coffin = await this.loadTexture(loader, './assets/environment/coffin.png');
       this.entranceTextures.statue = await this.loadTexture(loader, './assets/environment/statue.png');
       this.entranceTextures.arch = await this.loadTexture(loader, './assets/environment/entrance_arch.png');
+      
+      // Special room textures
+      this.throneRoomTexture = await this.loadTexture(loader, './assets/environment/throne room.png');
+      this.treasureRoomTexture = await this.loadTexture(loader, './assets/environment/treasure_room.png');
       
       this.isLoaded = true;
       console.log('✅ Environment textures loaded successfully!');
@@ -167,13 +179,22 @@ export class EnvironmentManager {
           // This is an interior position, get from expanded grid
           const originalI = i - 1; // Adjust for top wall padding
           const originalJ = j - 1; // Adjust for left wall padding
-          row.push(expandedGrid[originalI][originalJ]);
+          
+          // Check if coordinates are within expanded grid bounds
+          if (originalI >= 0 && originalI < expandedGrid.length && 
+              originalJ >= 0 && originalJ < expandedGrid[originalI].length) {
+            row.push(expandedGrid[originalI][originalJ]);
+          } else {
+            // Coordinates are outside original grid - assign a normal room value for extension areas
+            console.log(`🏰 Extended area at grid position [${i}, ${j}] (original [${originalI}, ${originalJ}]) - assigning room value 0`);
+            row.push(0); // Normal room value for extended areas
+          }
         }
       }
       finalGrid.push(row);
     }
     
-    console.log(`� Generated expanded matrix with walls: ${finalGrid.length}x${paddedWidth} (added ${extraRows} water rows + wall padding)`);
+    console.log(`📐 Generated expanded matrix with walls: ${finalGrid.length}x${paddedWidth} (added ${extraRows} water rows + wall padding)`);
     return finalGrid;
   }
 
@@ -191,6 +212,13 @@ export class EnvironmentManager {
   createFloorForCell(i, j, cellSize, scene, gridWidth, gridHeight, roomValue = 0) {
     if (!this.isLoaded) {
       console.warn('⚠️ Environment textures not loaded yet');
+      return;
+    }
+
+    // Check if this position is part of the special final room - skip regular floor creation
+    const coordKey = `${i},${j}`;
+    if (this.specialFinalRoomCoords.has(coordKey)) {
+      console.log(`🏰 Skipping regular floor for special final room at (${i},${j})`);
       return;
     }
 
@@ -642,7 +670,27 @@ export class EnvironmentManager {
     // Also clear visited cells when clearing floors
     this.clearVisitedCells(scene);
     
-    console.log('🧹 Cleared all floor and wall elements');
+    // Clear special final room coordinates
+    this.specialFinalRoomCoords.clear();
+    
+    // Note: Special room sprites (this.specialRoomSprites) are NOT cleared here
+    // They should persist during rescue and only be cleared when regenerating dungeon
+    
+    console.log('🧹 Cleared all floor and wall elements (special rooms preserved)');
+  }
+
+  // Method to clear special room sprites (called only when regenerating dungeon)
+  clearSpecialRooms(scene) {
+    this.specialRoomSprites.forEach(sprite => {
+      scene.remove(sprite);
+      if (sprite.material.map) {
+        sprite.material.map.dispose();
+      }
+      sprite.material.dispose();
+    });
+    this.specialRoomSprites = [];
+    
+    console.log('🧹 Cleared special room sprites');
   }
 
   // Method to mark a cell as visited and darken it
@@ -803,10 +851,231 @@ export class EnvironmentManager {
         this.statueSprite.material.map.offset.x = offsetX;
         
         this.statueLastFrame = now;
-        
-        console.log(`🗿 Statue frame: ${this.statueCurrentFrame}, offset: ${offsetX}`);
       }
     }
+  }
+
+  // Method to pre-register special final room coordinates to prevent regular floor creation
+  preRegisterSpecialFinalRoom(originalGrid, path) {
+    if (!path || path.length === 0) return;
+    
+    // Get the final room position
+    const [finalI, finalJ] = path[path.length - 1];
+    
+    console.log(`🏰 Pre-registering special final room coordinates at [${finalI}, ${finalJ}]`);
+    console.log(`🏰 Original grid dimensions: ${originalGrid.length} x ${originalGrid[0].length}`);
+    
+    // Calculate expanded grid dimensions (standard without extension)
+    const expandedGridHeight = originalGrid.length + 3 + 2; // 3 water rows + 2 wall padding
+    const expandedGridWidth = originalGrid[0].length + 2; // 2 wall padding
+    console.log(`🏰 Expanded grid dimensions: ${expandedGridHeight} x ${expandedGridWidth}`);
+    
+    // Get the final room position in expanded coordinates
+    const expandedFinalI = finalI + 3 + 1; // 3 water rows + 1 top wall padding
+    const expandedFinalJ = finalJ + 1; // 1 left wall padding
+    
+    console.log(`🏰 Final room expanded position: [${expandedFinalI}, ${expandedFinalJ}]`);
+    
+    // For canvas approach, we only need to mark the original final room position
+    const coordKey = `${expandedFinalI},${expandedFinalJ}`;
+    this.specialFinalRoomCoords.add(coordKey);
+    console.log(`🏰 Pre-registered special room coordinate: ${coordKey}`);
+    
+    return { expandedFinalI, expandedFinalJ, finalRoomWidth: 1 };
+  }
+
+  // Method to create special final room environment using canvas
+  async createSpecialFinalRoom(originalGrid, cellSize, scene, path) {
+    console.log('🏰 createSpecialFinalRoom called with:', { 
+      gridSize: originalGrid ? `${originalGrid.length}x${originalGrid[0].length}` : 'null',
+      cellSize, 
+      sceneExists: !!scene, 
+      pathLength: path ? path.length : 'null' 
+    });
+    
+    if (!path || path.length === 0) {
+      console.warn('🏰 No path provided, exiting createSpecialFinalRoom');
+      return;
+    }
+    
+    // Get the final room position
+    const [finalI, finalJ] = path[path.length - 1];
+    const finalRoomValue = originalGrid[finalI][finalJ];
+    
+    console.log(`🏰 Creating canvas-based special final room at [${finalI}, ${finalJ}] with value ${finalRoomValue}`);
+    
+    // Calculate expanded grid dimensions (standard)
+    const expandedGridHeight = originalGrid.length + 3 + 2; // 3 water rows + 2 wall padding
+    const expandedGridWidth = originalGrid[0].length + 2; // 2 wall padding
+    
+    // Get the final room position in expanded coordinates
+    const expandedFinalI = finalI + 3 + 1; // 3 water rows + 1 top wall padding
+    const expandedFinalJ = finalJ + 1; // 1 left wall padding
+    
+    console.log(`🏰 Final room expanded position: [${expandedFinalI}, ${expandedFinalJ}]`);
+    
+    // Calculate the position for the canvas following the yellow line path
+    // Position the canvas to extend horizontally to the right from the final room
+    const finalRoomX = expandedFinalJ * cellSize - (expandedGridWidth * cellSize) / 2;
+    const finalRoomY = -expandedFinalI * cellSize + (expandedGridHeight * cellSize) / 2;
+    
+    // Create a large canvas for the special final room
+    const canvasWidth = cellSize * 7; // 7 rooms wide
+    const canvasHeight = cellSize * 2; // 2 rooms tall
+    
+    // Position canvas to start from the final room and extend to the right (following yellow line)
+    const canvasX = finalRoomX + cellSize * 2.0; // Start 1.5 cells to the right of final room
+    const canvasY = finalRoomY + 0.5 * cellSize; // Same Y level as final room
+    
+    console.log(`🏰 Creating special room canvas at (${canvasX}, ${canvasY}) with size ${canvasWidth}x${canvasHeight}`);
+    console.log(`🏰 Final room is at (${finalRoomX}, ${finalRoomY}), canvas extends horizontally to the right`);
+    
+    // Create the canvas and draw the special room background
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext('2d');
+    
+    // Create a beautiful special room background (now async)
+    await this.drawSpecialRoomBackground(ctx, canvasWidth, canvasHeight, cellSize, finalRoomValue);
+    
+    // Convert canvas to texture
+    const canvasTexture = new THREE.CanvasTexture(canvas);
+    canvasTexture.magFilter = THREE.NearestFilter;
+    canvasTexture.minFilter = THREE.NearestFilter;
+    
+    // Create sprite material
+    const canvasMaterial = new THREE.SpriteMaterial({
+      map: canvasTexture,
+      transparent: true,
+      alphaTest: 0.1
+    });
+    
+    // Create the special room sprite
+    const specialRoomSprite = new THREE.Sprite(canvasMaterial);
+    specialRoomSprite.scale.set(canvasWidth, canvasHeight, 1);
+    specialRoomSprite.position.set(canvasX, canvasY, -0.05); // Floor level, same as other special floors
+    
+    scene.add(specialRoomSprite);
+    this.specialRoomSprites.push(specialRoomSprite); // Store separately so it doesn't get cleared with regular floors
+    
+    console.log(`✅ Created canvas-based special final room at position (${canvasX}, ${canvasY})`);
+    console.log(`✅ Canvas positioned to follow yellow line path extending horizontally from final room`);
+    console.log(`✅ Canvas stored in specialRoomSprites to prevent clearing during rescue`);
+    
+    return { 
+      finalI: expandedFinalI, 
+      finalJ: expandedFinalJ, 
+      finalRoomWidth: 7, // Canvas spans 7 rooms
+      canvasSprite: specialRoomSprite,
+      canvasPosition: { x: canvasX, y: canvasY }
+    };
+  }
+  
+  // Helper method to draw special room background on canvas
+  async drawSpecialRoomBackground(ctx, width, height, cellSize, finalRoomValue = -1) {
+    console.log(`🎨 Drawing special room background on ${width}x${height} canvas, room value: ${finalRoomValue}`);
+    
+    // Clear entire canvas with transparency
+    ctx.clearRect(0, 0, width, height);
+    
+    // Calculate column width (7 columns total)
+    const columnWidth = width / 7;
+    
+    // First 2 columns: fully transparent (do nothing)
+    console.log(`🎨 First 2 columns (${columnWidth * 2}px) will be transparent`);
+    
+    // Remaining 5 columns: use appropriate room texture based on final room value
+    const backgroundRoomStartX = columnWidth * 2;
+    const backgroundRoomWidth = columnWidth * 5;
+    
+    // Choose texture based on whether final room is a threat room
+    const isThreatRoom = finalRoomValue < 0;
+    const backgroundTexture = isThreatRoom ? this.throneRoomTexture : this.treasureRoomTexture;
+    const roomType = isThreatRoom ? 'throne room' : 'treasure room';
+    
+    if (backgroundTexture && backgroundTexture.image) {
+      console.log(`🎨 Drawing ${roomType} texture from x=${backgroundRoomStartX} to ${backgroundRoomStartX + backgroundRoomWidth}`);
+      
+      // Draw the background texture in the last 5 columns
+      ctx.drawImage(
+        backgroundTexture.image,
+        backgroundRoomStartX, 0, // destination x, y
+        backgroundRoomWidth, height // destination width, height
+      );
+    } else {
+      console.warn(`⚠️ ${roomType} texture not available, using fallback pattern`);
+      
+      // Fallback: draw a patterned background for the last 5 columns
+      const fallbackColor = isThreatRoom ? '#4a4a4a' : '#6b5b73'; // Different colors for different room types
+      ctx.fillStyle = fallbackColor;
+      ctx.fillRect(backgroundRoomStartX, 0, backgroundRoomWidth, height);
+      
+      // Add some decorative pattern
+      for (let x = backgroundRoomStartX; x < backgroundRoomStartX + backgroundRoomWidth; x += cellSize) {
+        for (let y = 0; y < height; y += cellSize) {
+          const isEven = (((x - backgroundRoomStartX) / cellSize) + (y / cellSize)) % 2 === 0;
+          const lightColor = isThreatRoom ? '#5a5a5a' : '#7b6b83';
+          ctx.fillStyle = isEven ? lightColor : fallbackColor;
+          ctx.fillRect(x, y, cellSize, cellSize);
+        }
+      }
+    }
+    
+    // Add decorative elements only to the throne room area
+    //this.addCanvasDecorations(ctx, width, height, cellSize, throneRoomStartX);
+    
+    console.log('🎨 Special room background drawing completed');
+  }
+  
+  // Helper method to add decorative elements to the canvas
+  addCanvasDecorations(ctx, width, height, cellSize, throneRoomStartX = 0) {
+    // Only add decorations in the throne room area (last 5 columns)
+    const throneRoomWidth = width - throneRoomStartX;
+    
+    // Add some pillars/columns in the throne room area
+    const pillarWidth = cellSize * 0.3;
+    const pillarHeight = height * 0.8;
+    
+    // Left pillar (in throne room area)
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(throneRoomStartX + cellSize * 0.5, (height - pillarHeight) / 2, pillarWidth, pillarHeight);
+    
+    // Right pillar (in throne room area)
+    ctx.fillRect(throneRoomStartX + throneRoomWidth - cellSize * 0.8, (height - pillarHeight) / 2, pillarWidth, pillarHeight);
+    
+    // Add decorative arches in throne room
+    const archCenterX = throneRoomStartX + throneRoomWidth / 2;
+    ctx.beginPath();
+    ctx.arc(archCenterX, height * 0.2, cellSize * 0.5, 0, Math.PI, false);
+    ctx.fillStyle = '#9a9a9a';
+    ctx.fill();
+    
+    // Add some mystical symbols or patterns in throne room
+    ctx.fillStyle = '#aaaaaa';
+    ctx.font = `${cellSize * 0.4}px serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('♦', throneRoomStartX + throneRoomWidth * 0.25, height * 0.7);
+    ctx.fillText('♦', throneRoomStartX + throneRoomWidth * 0.75, height * 0.7);
+    
+    // Add a central focal point for the princess area (far right of throne room)
+    const princessX = throneRoomStartX + throneRoomWidth * 0.85;
+    const princessY = height * 0.5;
+    ctx.beginPath();
+    ctx.arc(princessX, princessY, cellSize * 0.2, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffddaa';
+    ctx.fill();
+    ctx.strokeStyle = '#dda500';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    
+    console.log(`🎨 Added decorations to throne room area starting at x=${throneRoomStartX}`);
+  }
+  
+  // Legacy method - kept for compatibility but canvas approach is preferred
+  createSpecialFloorTile(x, y, cellSize, scene, textureType) {
+    console.log(`🏰 Legacy createSpecialFloorTile called - canvas approach is now preferred`);
+    return null;
   }
 
   // Method to update floor animations (if needed in the future)

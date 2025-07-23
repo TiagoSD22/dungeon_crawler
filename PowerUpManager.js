@@ -243,9 +243,19 @@ export class PowerUpManager {
     if (this.currentInventory) {
       inventoryElement.style.display = 'block';
       emptySlot.style.display = 'none';
-      inventoryIcon.src = `./assets/power_ups/${this.currentInventory}.png`;
-      inventoryIcon.alt = this.currentInventory;
-      document.getElementById('powerUpName').textContent = this.currentInventory.replace('_', ' ').toUpperCase();
+      
+      // Handle special queen blessings
+      if (this.currentInventory.isQueenBlessing && this.currentInventory.iconPath) {
+        inventoryIcon.src = this.currentInventory.iconPath;
+        inventoryIcon.alt = this.currentInventory.name;
+        document.getElementById('powerUpName').textContent = this.currentInventory.name;
+      } else {
+        // Handle regular power-ups
+        const powerUpType = typeof this.currentInventory === 'string' ? this.currentInventory : this.currentInventory.type;
+        inventoryIcon.src = `./assets/power_ups/${powerUpType}.png`;
+        inventoryIcon.alt = powerUpType;
+        document.getElementById('powerUpName').textContent = powerUpType.replace('_', ' ').toUpperCase();
+      }
     } else {
       inventoryElement.style.display = 'none';
       emptySlot.style.display = 'flex';
@@ -266,6 +276,12 @@ export class PowerUpManager {
 
   getCurrentPowerUp() {
     return this.currentInventory;
+  }
+
+  setCurrentPowerUp(powerUp) {
+    this.currentInventory = powerUp;
+    this.updateInventoryUI();
+    console.log(`💎 Power-up set to: ${powerUp ? powerUp.name || powerUp.type : 'None'}`);
   }
 
   dispose() {
