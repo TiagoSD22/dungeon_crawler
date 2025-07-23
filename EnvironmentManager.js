@@ -851,8 +851,6 @@ export class EnvironmentManager {
         this.statueSprite.material.map.offset.x = offsetX;
         
         this.statueLastFrame = now;
-        
-        console.log(`🗿 Statue frame: ${this.statueCurrentFrame}, offset: ${offsetX}`);
       }
     }
   }
