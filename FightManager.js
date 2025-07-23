@@ -75,12 +75,21 @@ export class FightManager {
     // Wait for positioning before starting boss fight
     await this.wait(800);
 
+    // Show initial boss threat dialog
+    await this.showBossThreatDialog();
+
+    // Play queen blessing animation after first dialog
+    await this.playQueenBlessingSequence(knight);
+
+    // Play boss anger animation and show second dialog
+    await this.playBossAngerSequence(boss);
+
     for (let round = 1; round <= rounds; round++) {
       console.log(`👹 Boss Round ${round}/${rounds}`);
       this.currentFight.currentRound = round;
 
-      // Boss attacks first (same as regular enemy attack)
-      await this.executeEnemyAttack(boss, knight, knightDirection);
+      // Boss attacks first with special attack
+      await this.executeBossSpecialAttack(boss, knight, knightDirection);
       
       // After the first boss attack, trigger HP notification
       if (round === 1 && onFirstAttackComplete) {
@@ -100,8 +109,326 @@ export class FightManager {
       }
     }
 
-    // Boss fight is over - complete without death animation (handled by dialog)
+    // Boss fight is over - show boss defeat dialog first
+    await this.showBossDefeatDialog();
+
+    // Play boss death animation
+    await this.playBossDeathSequence(boss);
+
+    // Complete without death animation (already played)
     this.completeFight();
+  }
+
+  async showBossThreatDialog() {
+    return new Promise((resolve) => {
+      // Create dialog overlay
+      const dialogOverlay = document.createElement('div');
+      dialogOverlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        font-family: Arial, sans-serif;
+      `;
+
+      const dialogBox = document.createElement('div');
+      dialogBox.style.cssText = `
+        background: #2a1810;
+        border: 4px solid #8b4513;
+        border-radius: 10px;
+        padding: 30px;
+        max-width: 500px;
+        text-align: center;
+        color: #ff6b35;
+        box-shadow: 0 0 20px rgba(255, 107, 53, 0.5);
+      `;
+
+      dialogBox.innerHTML = `
+        <h2 style="margin: 0 0 20px 0; color: #ff3333; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">👹 BOSS</h2>
+        <p style="font-size: 18px; margin: 20px 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">"Go back and I may let you live, your insect!"</p>
+        <button id="bossThreatNext" style="
+          background: #8b4513;
+          color: white;
+          border: 2px solid #ff6b35;
+          padding: 12px 30px;
+          font-size: 16px;
+          cursor: pointer;
+          border-radius: 5px;
+          text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+          transition: all 0.3s;
+        ">Next</button>
+      `;
+
+      document.body.appendChild(dialogOverlay);
+
+      console.log('🔍 Boss threat dialog overlay added to DOM, waiting for render...');
+
+      // Wait a moment for DOM to render, then add event listener
+      setTimeout(() => {
+        console.log('🔍 Attempting to find bossThreatNext button...');
+        const button = document.getElementById('bossThreatNext');
+        console.log('🔍 Button found:', button);
+        
+        if (button) {
+          console.log('✅ bossThreatNext button found, adding event listener');
+          button.addEventListener('click', () => {
+            console.log('🖱️ bossThreatNext button clicked');
+            document.body.removeChild(dialogOverlay);
+            resolve();
+          });
+        } else {
+          console.error('❌ Could not find bossThreatNext button after timeout');
+          // Try to find it by querying the dialog box directly
+          const dialogButtons = dialogOverlay.querySelectorAll('button');
+          console.log('🔍 Found buttons in dialog:', dialogButtons.length);
+          
+          if (dialogButtons.length > 0) {
+            console.log('🔧 Using first button found as fallback');
+            dialogButtons[0].addEventListener('click', () => {
+              console.log('🖱️ Fallback button clicked');
+              document.body.removeChild(dialogOverlay);
+              resolve();
+            });
+          } else {
+            console.error('❌ No buttons found at all, resolving to prevent hang');
+            // Fallback: resolve anyway to prevent hanging
+            document.body.removeChild(dialogOverlay);
+            resolve();
+          }
+        }
+      }, 300); // Increased timeout to 300ms
+    });
+  }
+
+  async playQueenBlessingSequence(knight) {
+    console.log('👑 Playing queen blessing sequence');
+    // This will trigger the existing queen blessing animation
+    if (knight.playQueenBlessingAnimation) {
+      await knight.playQueenBlessingAnimation();
+    }
+    await this.wait(1000);
+  }
+
+  async playBossAngerSequence(boss) {
+    // Play boss anger animation
+    console.log('😡 Playing boss anger animation');
+    if (boss.playAngerAnimation) {
+      await boss.playAngerAnimation();
+    }
+
+    // Show boss anger dialog
+    return new Promise((resolve) => {
+      const dialogOverlay = document.createElement('div');
+      dialogOverlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        font-family: Arial, sans-serif;
+      `;
+
+      const dialogBox = document.createElement('div');
+      dialogBox.style.cssText = `
+        background: #2a1810;
+        border: 4px solid #8b4513;
+        border-radius: 10px;
+        padding: 30px;
+        max-width: 500px;
+        text-align: center;
+        color: #ff6b35;
+        box-shadow: 0 0 20px rgba(255, 107, 53, 0.5);
+      `;
+
+      dialogBox.innerHTML = `
+        <h2 style="margin: 0 0 20px 0; color: #ff3333; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">👹 BOSS</h2>
+        <p style="font-size: 18px; margin: 20px 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">"Now I will remove you from this earth! Die!!"</p>
+        <button id="bossAngerNext" style="
+          background: #8b4513;
+          color: white;
+          border: 2px solid #ff6b35;
+          padding: 12px 30px;
+          font-size: 16px;
+          cursor: pointer;
+          border-radius: 5px;
+          text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+          transition: all 0.3s;
+        ">Next</button>
+      `;
+
+      document.body.appendChild(dialogOverlay);
+
+      console.log('🔍 Dialog overlay added to DOM, waiting for render...');
+
+      // Wait a moment for DOM to render, then add event listener
+      setTimeout(() => {
+        console.log('🔍 Attempting to find bossAngerNext button...');
+        const button = document.getElementById('bossAngerNext');
+        console.log('🔍 Button found:', button);
+        
+        if (button) {
+          console.log('✅ bossAngerNext button found, adding event listener');
+          button.addEventListener('click', () => {
+            console.log('🖱️ bossAngerNext button clicked');
+            document.body.removeChild(dialogOverlay);
+            resolve();
+          });
+        } else {
+          console.error('❌ Could not find bossAngerNext button after timeout');
+          // Try to find it by querying the dialog box directly
+          const dialogButtons = dialogOverlay.querySelectorAll('button');
+          console.log('🔍 Found buttons in dialog:', dialogButtons.length);
+          
+          if (dialogButtons.length > 0) {
+            console.log('🔧 Using first button found as fallback');
+            dialogButtons[0].addEventListener('click', () => {
+              console.log('🖱️ Fallback button clicked');
+              document.body.removeChild(dialogOverlay);
+              resolve();
+            });
+          } else {
+            console.error('❌ No buttons found at all, resolving to prevent hang');
+            // Fallback: resolve anyway to prevent hanging
+            document.body.removeChild(dialogOverlay);
+            resolve();
+          }
+        }
+      }, 300); // Increased timeout to 300ms
+    });
+  }
+
+  async executeBossSpecialAttack(boss, knight, knightDirection) {
+    console.log(`🔥 Boss executes special attack!`);
+    
+    // Choose random special attack
+    const specialAttacks = ['fire', 'blade', 'lightning'];
+    const randomAttack = specialAttacks[Math.floor(Math.random() * specialAttacks.length)];
+    
+    console.log(`👹 Boss uses ${randomAttack} special attack!`);
+    
+    // Play boss special attack animation
+    if (boss.playSpecialAttackAnimation) {
+      await boss.playSpecialAttackAnimation(randomAttack);
+    }
+    
+    await this.wait(500);
+    
+    // Play knight hurt animation
+    await this.playKnightHurtAnimation(knight, knightDirection);
+  }
+
+  async showBossDefeatDialog() {
+    return new Promise((resolve) => {
+      const dialogOverlay = document.createElement('div');
+      dialogOverlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        font-family: Arial, sans-serif;
+      `;
+
+      const dialogBox = document.createElement('div');
+      dialogBox.style.cssText = `
+        background: #1a3d2e;
+        border: 4px solid #4CAF50;
+        border-radius: 10px;
+        padding: 30px;
+        max-width: 500px;
+        text-align: center;
+        color: #90EE90;
+        box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+      `;
+
+      dialogBox.innerHTML = `
+        <h2 style="margin: 0 0 20px 0; color: #4CAF50; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">⚔️ VICTORY!</h2>
+        <p style="font-size: 18px; margin: 20px 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">The boss has been defeated! The path to the princess is clear.</p>
+        <button id="bossDefeatNext" style="
+          background: #4CAF50;
+          color: white;
+          border: 2px solid #90EE90;
+          padding: 12px 30px;
+          font-size: 16px;
+          cursor: pointer;
+          border-radius: 5px;
+          text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+          transition: all 0.3s;
+        ">Continue</button>
+      `;
+
+      document.body.appendChild(dialogOverlay);
+
+      console.log('🔍 Boss defeat dialog overlay added to DOM, waiting for render...');
+
+      // Wait a moment for DOM to render, then add event listener
+      setTimeout(() => {
+        console.log('🔍 Attempting to find bossDefeatNext button...');
+        const button = document.getElementById('bossDefeatNext');
+        console.log('🔍 Button found:', button);
+        
+        if (button) {
+          console.log('✅ bossDefeatNext button found, adding event listener');
+          button.addEventListener('click', () => {
+            console.log('🖱️ bossDefeatNext button clicked');
+            document.body.removeChild(dialogOverlay);
+            resolve();
+          });
+        } else {
+          console.error('❌ Could not find bossDefeatNext button after timeout');
+          // Try to find it by querying the dialog box directly
+          const dialogButtons = dialogOverlay.querySelectorAll('button');
+          console.log('🔍 Found buttons in dialog:', dialogButtons.length);
+          
+          if (dialogButtons.length > 0) {
+            console.log('🔧 Using first button found as fallback');
+            dialogButtons[0].addEventListener('click', () => {
+              console.log('🖱️ Fallback button clicked');
+              document.body.removeChild(dialogOverlay);
+              resolve();
+            });
+          } else {
+            console.error('❌ No buttons found at all, resolving to prevent hang');
+            // Fallback: resolve anyway to prevent hanging
+            document.body.removeChild(dialogOverlay);
+            resolve();
+          }
+        }
+      }, 300); // Increased timeout to 300ms
+    });
+  }
+
+  async playBossDeathSequence(boss) {
+    console.log('💀 Playing boss death sequence');
+    
+    // Play boss death animation
+    if (boss.playDeathAnimation) {
+      await boss.playDeathAnimation();
+    }
+    
+    // Wait a moment for death animation to complete
+    await this.wait(1000);
+    
+    // Remove boss from scene
+    if (boss.removeFromScene) {
+      boss.removeFromScene();
+    }
   }
 
   async executeSpecialKnightAttack(knight, enemy, knightDirection) {
@@ -109,10 +436,16 @@ export class FightManager {
     
     // Play knight attack animation with special blessing effects
     // Wait for knight attack animation to complete, which includes blessing effect
-    await knight.playSpecialAttackAnimation();
+    const knightAttackPromise = knight.playSpecialAttackAnimation();
     
-    // Then play enemy hurt animation
-    await this.playEnemyHurtAnimation(enemy, knightDirection);
+    // Wait a moment for blessing effect to start, then play boss hurt animation
+    await this.wait(800); // Let blessing animation play for a bit
+    
+    // Play boss hurt animation while blessing effect is still playing
+    const bossHurtPromise = this.playEnemyHurtAnimation(enemy, knightDirection);
+    
+    // Wait for both animations to complete
+    await Promise.all([knightAttackPromise, bossHurtPromise]);
   }
 
   async executeFightSequence() {
