@@ -1158,19 +1158,7 @@ function startFinalRoomSequence() {
         // Stop at idle position
         if (knight.characterController) {
           knight.characterController.goIdle('Right');
-        }
-        
-        // Branch based on room type
-        if (isThreatRoom) {
-          // Threat room: Start queen blessing sequence (leads to boss fight)
-          setTimeout(() => {
-            startQueenBlessing();
-          }, 500);
-        } else {
-          // Non-threat room: Go directly to princess (treasure room)
-          setTimeout(() => {
-            moveKnightToPrincess();
-          }, 500);
+          grantRandomBlessing()
         }
       }
     );
@@ -1185,70 +1173,9 @@ function startQueenBlessing() {
   if (princess && princess.princessController) {
     princess.princessController.startBlessingAnimation();
   }
-  
-  // Show blessing dialog after animation completes
-  setTimeout(() => {
-    showBlessingDialog();
-  }, 2000); // Adjust timing based on animation length
 }
 
-function showBlessingDialog() {
-  // Create blessing dialog
-  const dialog = document.createElement('div');
-  dialog.className = 'blessing-dialog';
-  dialog.innerHTML = `
-    <div class="dialog-content">
-      <div class="dialog-text">
-        <strong>Queen:</strong> I give you my bless my brave knight!
-      </div>
-      <button id="blessingNextBtn" class="dialog-button">Next</button>
-    </div>
-  `;
-  
-  // Add styling
-  dialog.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 20px;
-    border-radius: 10px;
-    border: 2px solid gold;
-    z-index: 1000;
-    font-family: Arial, sans-serif;
-    text-align: center;
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-  `;
-  
-  const content = dialog.querySelector('.dialog-content');
-  content.style.cssText = `
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    align-items: center;
-  `;
-  
-  const button = dialog.querySelector('#blessingNextBtn');
-  button.style.cssText = `
-    padding: 10px 20px;
-    background: gold;
-    color: black;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 16px;
-  `;
-  
-  button.addEventListener('click', () => {
-    document.body.removeChild(dialog);
-    grantRandomBlessing();
-  });
-  
-  document.body.appendChild(dialog);
-}
+
 
 function grantRandomBlessing() {
   const blessings = ["Phoenix", "Kraken", "Void"];
@@ -1260,6 +1187,8 @@ function grantRandomBlessing() {
   if (princess && princess.princessController) {
     princess.princessController.goIdle();
   }
+
+  startQueenBlessing()
   
   // Set the special power-up based on blessing
   const specialPowerUp = createSpecialPowerUp(chosenBlessing);
