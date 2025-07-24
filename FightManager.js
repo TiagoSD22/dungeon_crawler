@@ -109,11 +109,11 @@ export class FightManager {
       }
     }
 
-    // Boss fight is over - show boss defeat dialog first
-    await this.showBossDefeatDialog();
-
     // Play boss death animation
     await this.playBossDeathSequence(boss);
+
+        // Boss fight is over - show boss defeat dialog first
+    await this.showBossDefeatDialog();
 
     // Complete without death animation (already played)
     this.completeFight();
@@ -149,70 +149,172 @@ export class FightManager {
         box-shadow: 0 0 20px rgba(255, 107, 53, 0.5);
       `;
 
-      dialogBox.innerHTML = `
-        <h2 style="margin: 0 0 20px 0; color: #ff3333; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">👹 BOSS</h2>
-        <p style="font-size: 18px; margin: 20px 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">"Go back and I may let you live, your insect!"</p>
-        <button id="bossThreatNext" style="
-          background: #8b4513;
-          color: white;
-          border: 2px solid #ff6b35;
-          padding: 12px 30px;
-          font-size: 16px;
-          cursor: pointer;
-          border-radius: 5px;
-          text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-          transition: all 0.3s;
-        ">Next</button>
+      // Create button element directly
+      const button = document.createElement('button');
+      button.style.cssText = `
+        background: #8b4513;
+        color: white;
+        border: 2px solid #ff6b35;
+        padding: 12px 30px;
+        font-size: 16px;
+        cursor: pointer;
+        border-radius: 5px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        transition: all 0.3s;
       `;
+      button.textContent = 'Next';
+      
+      // Add click event directly to the button element
+      button.addEventListener('click', () => {
+        console.log('🖱️ Boss threat dialog button clicked');
+        document.body.removeChild(dialogOverlay);
+        resolve();
+      });
 
+      // Create the dialog content
+      const title = document.createElement('h2');
+      title.style.cssText = 'margin: 0 0 20px 0; color: #ff3333; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);';
+      title.textContent = '👹 BOSS';
+
+      const message = document.createElement('p');
+      message.style.cssText = 'font-size: 18px; margin: 20px 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);';
+      message.textContent = '"Go back and I may let you live, your insect!"';
+
+      // Assemble the dialog
+      dialogBox.appendChild(title);
+      dialogBox.appendChild(message);
+      dialogBox.appendChild(button);
+      dialogOverlay.appendChild(dialogBox);
+
+      console.log('🔍 Boss threat dialog created, adding to DOM...');
       document.body.appendChild(dialogOverlay);
-
-      console.log('🔍 Boss threat dialog overlay added to DOM, waiting for render...');
-
-      // Wait a moment for DOM to render, then add event listener
-      setTimeout(() => {
-        console.log('🔍 Attempting to find bossThreatNext button...');
-        const button = document.getElementById('bossThreatNext');
-        console.log('🔍 Button found:', button);
-        
-        if (button) {
-          console.log('✅ bossThreatNext button found, adding event listener');
-          button.addEventListener('click', () => {
-            console.log('🖱️ bossThreatNext button clicked');
-            document.body.removeChild(dialogOverlay);
-            resolve();
-          });
-        } else {
-          console.error('❌ Could not find bossThreatNext button after timeout');
-          // Try to find it by querying the dialog box directly
-          const dialogButtons = dialogOverlay.querySelectorAll('button');
-          console.log('🔍 Found buttons in dialog:', dialogButtons.length);
-          
-          if (dialogButtons.length > 0) {
-            console.log('🔧 Using first button found as fallback');
-            dialogButtons[0].addEventListener('click', () => {
-              console.log('🖱️ Fallback button clicked');
-              document.body.removeChild(dialogOverlay);
-              resolve();
-            });
-          } else {
-            console.error('❌ No buttons found at all, resolving to prevent hang');
-            // Fallback: resolve anyway to prevent hanging
-            document.body.removeChild(dialogOverlay);
-            resolve();
-          }
-        }
-      }, 300); // Increased timeout to 300ms
+      console.log('✅ Boss threat dialog added to DOM successfully');
     });
   }
 
   async playQueenBlessingSequence(knight) {
     console.log('👑 Playing queen blessing sequence');
-    // This will trigger the existing queen blessing animation
+    
+    // Show queen blessing dialog first
+    await this.showQueenBlessingDialog();
+    
+    // Then trigger the existing queen blessing animation
     if (knight.playQueenBlessingAnimation) {
       await knight.playQueenBlessingAnimation();
     }
     await this.wait(1000);
+  }
+
+  async showQueenBlessingDialog() {
+    return new Promise((resolve) => {
+      // Create dialog overlay
+      const dialogOverlay = document.createElement('div');
+      dialogOverlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        font-family: Arial, sans-serif;
+      `;
+
+      const dialogBox = document.createElement('div');
+      dialogBox.style.cssText = `
+        background: linear-gradient(135deg, #4a148c, #7b1fa2);
+        border: 4px solid #e1bee7;
+        border-radius: 15px;
+        padding: 30px;
+        max-width: 500px;
+        text-align: center;
+        color: #f3e5f5;
+        box-shadow: 0 0 30px rgba(225, 190, 231, 0.6);
+        position: relative;
+      `;
+
+      // Add royal glow effect
+      dialogBox.style.background = `
+        linear-gradient(135deg, #4a148c, #7b1fa2),
+        radial-gradient(circle at center, rgba(255, 215, 0, 0.1), transparent)
+      `;
+
+      // Create button element directly
+      const button = document.createElement('button');
+      button.style.cssText = `
+        background: linear-gradient(135deg, #7b1fa2, #9c27b0);
+        color: #f3e5f5;
+        border: 2px solid #e1bee7;
+        padding: 12px 30px;
+        font-size: 16px;
+        cursor: pointer;
+        border-radius: 8px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        transition: all 0.3s;
+        box-shadow: 0 4px 15px rgba(156, 39, 176, 0.4);
+      `;
+      button.textContent = 'Accept Blessing';
+      
+      // Add hover effect
+      button.addEventListener('mouseenter', () => {
+        button.style.background = 'linear-gradient(135deg, #9c27b0, #ab47bc)';
+        button.style.transform = 'translateY(-2px)';
+      });
+      
+      button.addEventListener('mouseleave', () => {
+        button.style.background = 'linear-gradient(135deg, #7b1fa2, #9c27b0)';
+        button.style.transform = 'translateY(0)';
+      });
+      
+      // Add click event directly to the button element
+      button.addEventListener('click', () => {
+        console.log('🖱️ Queen blessing dialog button clicked');
+        document.body.removeChild(dialogOverlay);
+        resolve();
+      });
+
+      // Create the dialog content
+      const title = document.createElement('h2');
+      title.style.cssText = `
+        margin: 0 0 20px 0; 
+        color: #e1bee7; 
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        font-size: 24px;
+      `;
+      title.textContent = '👑 THE QUEEN';
+
+      const message = document.createElement('p');
+      message.style.cssText = `
+        font-size: 18px; 
+        margin: 20px 0; 
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        line-height: 1.4;
+      `;
+      message.textContent = '"My brave knight, accept my divine blessing. May the light guide your blade against the darkness ahead."';
+
+      // Add crown decoration
+      const crown = document.createElement('div');
+      crown.style.cssText = `
+        font-size: 32px;
+        margin-bottom: 10px;
+        text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+      `;
+      crown.textContent = '👑';
+
+      // Assemble the dialog
+      dialogBox.appendChild(crown);
+      dialogBox.appendChild(title);
+      dialogBox.appendChild(message);
+      dialogBox.appendChild(button);
+      dialogOverlay.appendChild(dialogBox);
+
+      console.log('🔍 Queen blessing dialog created, adding to DOM...');
+      document.body.appendChild(dialogOverlay);
+      console.log('✅ Queen blessing dialog added to DOM successfully');
+    });
   }
 
   async playBossAngerSequence(boss) {
@@ -251,60 +353,46 @@ export class FightManager {
         box-shadow: 0 0 20px rgba(255, 107, 53, 0.5);
       `;
 
-      dialogBox.innerHTML = `
-        <h2 style="margin: 0 0 20px 0; color: #ff3333; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">👹 BOSS</h2>
-        <p style="font-size: 18px; margin: 20px 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">"Now I will remove you from this earth! Die!!"</p>
-        <button id="bossAngerNext" style="
-          background: #8b4513;
-          color: white;
-          border: 2px solid #ff6b35;
-          padding: 12px 30px;
-          font-size: 16px;
-          cursor: pointer;
-          border-radius: 5px;
-          text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-          transition: all 0.3s;
-        ">Next</button>
+      // Create button element directly
+      const button = document.createElement('button');
+      button.style.cssText = `
+        background: #8b4513;
+        color: white;
+        border: 2px solid #ff6b35;
+        padding: 12px 30px;
+        font-size: 16px;
+        cursor: pointer;
+        border-radius: 5px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        transition: all 0.3s;
       `;
+      button.textContent = 'Next';
+      
+      // Add click event directly to the button element
+      button.addEventListener('click', () => {
+        console.log('🖱️ Boss anger dialog button clicked');
+        document.body.removeChild(dialogOverlay);
+        resolve();
+      });
 
+      // Create the dialog content
+      const title = document.createElement('h2');
+      title.style.cssText = 'margin: 0 0 20px 0; color: #ff3333; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);';
+      title.textContent = '👹 BOSS';
+
+      const message = document.createElement('p');
+      message.style.cssText = 'font-size: 18px; margin: 20px 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);';
+      message.textContent = '"Now I will remove you from this earth! Die!!"';
+
+      // Assemble the dialog
+      dialogBox.appendChild(title);
+      dialogBox.appendChild(message);
+      dialogBox.appendChild(button);
+      dialogOverlay.appendChild(dialogBox);
+
+      console.log('🔍 Boss anger dialog created, adding to DOM...');
       document.body.appendChild(dialogOverlay);
-
-      console.log('🔍 Dialog overlay added to DOM, waiting for render...');
-
-      // Wait a moment for DOM to render, then add event listener
-      setTimeout(() => {
-        console.log('🔍 Attempting to find bossAngerNext button...');
-        const button = document.getElementById('bossAngerNext');
-        console.log('🔍 Button found:', button);
-        
-        if (button) {
-          console.log('✅ bossAngerNext button found, adding event listener');
-          button.addEventListener('click', () => {
-            console.log('🖱️ bossAngerNext button clicked');
-            document.body.removeChild(dialogOverlay);
-            resolve();
-          });
-        } else {
-          console.error('❌ Could not find bossAngerNext button after timeout');
-          // Try to find it by querying the dialog box directly
-          const dialogButtons = dialogOverlay.querySelectorAll('button');
-          console.log('🔍 Found buttons in dialog:', dialogButtons.length);
-          
-          if (dialogButtons.length > 0) {
-            console.log('🔧 Using first button found as fallback');
-            dialogButtons[0].addEventListener('click', () => {
-              console.log('🖱️ Fallback button clicked');
-              document.body.removeChild(dialogOverlay);
-              resolve();
-            });
-          } else {
-            console.error('❌ No buttons found at all, resolving to prevent hang');
-            // Fallback: resolve anyway to prevent hanging
-            document.body.removeChild(dialogOverlay);
-            resolve();
-          }
-        }
-      }, 300); // Increased timeout to 300ms
+      console.log('✅ Boss anger dialog added to DOM successfully');
     });
   }
 
@@ -357,60 +445,46 @@ export class FightManager {
         box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
       `;
 
-      dialogBox.innerHTML = `
-        <h2 style="margin: 0 0 20px 0; color: #4CAF50; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">⚔️ VICTORY!</h2>
-        <p style="font-size: 18px; margin: 20px 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">The boss has been defeated! The path to the princess is clear.</p>
-        <button id="bossDefeatNext" style="
-          background: #4CAF50;
-          color: white;
-          border: 2px solid #90EE90;
-          padding: 12px 30px;
-          font-size: 16px;
-          cursor: pointer;
-          border-radius: 5px;
-          text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-          transition: all 0.3s;
-        ">Continue</button>
+      // Create button element directly
+      const button = document.createElement('button');
+      button.style.cssText = `
+        background: #4CAF50;
+        color: white;
+        border: 2px solid #90EE90;
+        padding: 12px 30px;
+        font-size: 16px;
+        cursor: pointer;
+        border-radius: 5px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        transition: all 0.3s;
       `;
+      button.textContent = 'Continue';
+      
+      // Add click event directly to the button element
+      button.addEventListener('click', () => {
+        console.log('🖱️ Boss defeat dialog button clicked');
+        document.body.removeChild(dialogOverlay);
+        resolve();
+      });
 
+      // Create the dialog content
+      const title = document.createElement('h2');
+      title.style.cssText = 'margin: 0 0 20px 0; color: #4CAF50; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);';
+      title.textContent = '⚔️ VICTORY!';
+
+      const message = document.createElement('p');
+      message.style.cssText = 'font-size: 18px; margin: 20px 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);';
+      message.textContent = 'The boss has been defeated! The path to the princess is clear.';
+
+      // Assemble the dialog
+      dialogBox.appendChild(title);
+      dialogBox.appendChild(message);
+      dialogBox.appendChild(button);
+      dialogOverlay.appendChild(dialogBox);
+
+      console.log('🔍 Boss defeat dialog created, adding to DOM...');
       document.body.appendChild(dialogOverlay);
-
-      console.log('🔍 Boss defeat dialog overlay added to DOM, waiting for render...');
-
-      // Wait a moment for DOM to render, then add event listener
-      setTimeout(() => {
-        console.log('🔍 Attempting to find bossDefeatNext button...');
-        const button = document.getElementById('bossDefeatNext');
-        console.log('🔍 Button found:', button);
-        
-        if (button) {
-          console.log('✅ bossDefeatNext button found, adding event listener');
-          button.addEventListener('click', () => {
-            console.log('🖱️ bossDefeatNext button clicked');
-            document.body.removeChild(dialogOverlay);
-            resolve();
-          });
-        } else {
-          console.error('❌ Could not find bossDefeatNext button after timeout');
-          // Try to find it by querying the dialog box directly
-          const dialogButtons = dialogOverlay.querySelectorAll('button');
-          console.log('🔍 Found buttons in dialog:', dialogButtons.length);
-          
-          if (dialogButtons.length > 0) {
-            console.log('🔧 Using first button found as fallback');
-            dialogButtons[0].addEventListener('click', () => {
-              console.log('🖱️ Fallback button clicked');
-              document.body.removeChild(dialogOverlay);
-              resolve();
-            });
-          } else {
-            console.error('❌ No buttons found at all, resolving to prevent hang');
-            // Fallback: resolve anyway to prevent hanging
-            document.body.removeChild(dialogOverlay);
-            resolve();
-          }
-        }
-      }, 300); // Increased timeout to 300ms
+      console.log('✅ Boss defeat dialog added to DOM successfully');
     });
   }
 
