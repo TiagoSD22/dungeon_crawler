@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AnimatedPrincess } from './AnimatedPrincess';
 
 export class FightManager {
   constructor(scene, cellSize = 120) {
@@ -44,7 +45,7 @@ export class FightManager {
   }
 
   // Start a boss fight with fixed 5 rounds
-  async startBossFight(knight, boss, knightDirection, rounds, onBossFightComplete, onFirstBossAttackComplete = null) {
+  async startBossFight(knight, boss, queen, powerUpManager, knightDirection, rounds, onBossFightComplete, onFirstBossAttackComplete = null) {
     if (this.isInFight) {
       console.log('⚠️ Fight already in progress');
       return;
@@ -57,6 +58,8 @@ export class FightManager {
     this.currentFight = {
       knight,
       enemy: boss,
+      queen: queen,
+      powerUpManager: powerUpManager,
       knightDirection,
       rounds,
       currentRound: 0,
@@ -70,16 +73,14 @@ export class FightManager {
   }
 
   async executeBossFightSequence() {
-    const { knight, enemy: boss, knightDirection, rounds, onFirstAttackComplete } = this.currentFight;
+    const { knight, enemy: boss, queen, powerUpManager, knightDirection, rounds, onFirstAttackComplete } = this.currentFight;
 
     // Wait for positioning before starting boss fight
     await this.wait(800);
 
-    // Show initial boss threat dialog
-    await this.showBossThreatDialog();
-
-    // Play queen blessing animation after first dialog
-    await this.playQueenBlessingSequence(knight);
+    // Show initial boss threat dialog and wait for user to click button
+    // This will trigger the queen blessing sequence
+    await this.showBossThreatDialog(queen, powerUpManager);
 
     // Play boss anger animation and show second dialog
     await this.playBossAngerSequence(boss);
@@ -110,16 +111,15 @@ export class FightManager {
     }
 
     // Play boss death animation
-    await this.playBossDeathSequence(boss);
+    //await this.playBossDeathSequence(boss);
+
+    await this.showBossWorthOponentDialog(boss);
 
         // Boss fight is over - show boss defeat dialog first
-    await this.showBossDefeatDialog();
-
-    // Complete without death animation (already played)
-    this.completeFight();
+    //await this.showBossDefeatDialog();
   }
 
-  async showBossThreatDialog() {
+  async showBossThreatDialog(queen, powerUpManager) {
     return new Promise((resolve) => {
       // Create dialog overlay
       const dialogOverlay = document.createElement('div');
@@ -162,12 +162,16 @@ export class FightManager {
         text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
         transition: all 0.3s;
       `;
-      button.textContent = 'Next';
+      button.textContent = 'Call for Queen\'s Help';
       
       // Add click event directly to the button element
-      button.addEventListener('click', () => {
-        console.log('🖱️ Boss threat dialog button clicked');
+      button.addEventListener('click', async () => {
+        console.log('🖱️ Boss threat dialog button clicked - calling for queen\'s help');
         document.body.removeChild(dialogOverlay);
+        
+        // Now trigger the queen blessing sequence
+        await this.playQueenBlessingSequence(this.currentFight.knight, queen, powerUpManager);
+        
         resolve();
       });
 
@@ -178,7 +182,7 @@ export class FightManager {
 
       const message = document.createElement('p');
       message.style.cssText = 'font-size: 18px; margin: 20px 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);';
-      message.textContent = '"Go back and I may let you live, your insect!"';
+      message.textContent = '"Go back and I may let you live, you insect!"';
 
       // Assemble the dialog
       dialogBox.appendChild(title);
@@ -192,20 +196,78 @@ export class FightManager {
     });
   }
 
-  async playQueenBlessingSequence(knight) {
+  async playQueenBlessingSequence(knight, queen, powerUpManager) {
     console.log('👑 Playing queen blessing sequence');
+
+    console.log('👑 Starting queen blessing animation');
+    queen.startBlessingAnimation();
     
     // Show queen blessing dialog first
-    await this.showQueenBlessingDialog();
+    await this.showQueenBlessingDialog(knight);
     
-    // Then trigger the existing queen blessing animation
-    if (knight.playQueenBlessingAnimation) {
+    // Then trigger the existing queen blessing animation on knight
+    /*if (knight.playQueenBlessingAnimation) {
+      await this.grantRandomBlessing(queen, knight, powerUpManager);
       await knight.playQueenBlessingAnimation();
-    }
-    await this.wait(1000);
+    }*/
+    
+    // Make sure queen returns to idle after blessing is complete
+    console.log('👸 Queen returning to idle after blessing sequence complete');
+    queen.goIdle();
+    
+    await this.wait(500); // Short wait to ensure idle animation starts
   }
 
-  async showQueenBlessingDialog() {
+  async grantRandomBlessing(queen, knight, powerUpManager) {
+    const blessings = ["Phoenix", "Kraken", "Void"];
+    const chosenBlessing = blessings[Math.floor(Math.random() * blessings.length)];
+    
+    console.log(`👑 Queen grants ${chosenBlessing} blessing!`);
+    
+    queen.goIdle();
+    
+    
+    // Set the special power-up based on blessing
+    const specialPowerUp = await this.createSpecialPowerUp(chosenBlessing);
+    
+    // Update knight's current power-up
+    await knight.setCurrentPowerUp(specialPowerUp);
+    
+    // Update power-up tracker display
+    await powerUpManager.setCurrentPowerUp(specialPowerUp);
+  }
+
+ async createSpecialPowerUp(blessingType) {
+    const powerUpData = {
+      type: blessingType.toLowerCase(),
+      name: `Queen's ${blessingType} Blessing`,
+      damage: 50, // Special high damage for queen's blessing
+      isQueenBlessing: true
+    };
+    
+    // Set icon based on blessing type
+    switch (blessingType) {
+      case "Phoenix":
+        powerUpData.iconPath = './assets/queen_blesses/Phoenix/phoenix_10.png';
+        powerUpData.animationPath = './assets/queen_blesses/Phoenix/';
+        powerUpData.frameCount = 16;
+        break;
+      case "Kraken":
+        powerUpData.iconPath = './assets/queen_blesses/Kraken/9.png';
+        powerUpData.animationPath = './assets/queen_blesses/Kraken/';
+        powerUpData.frameCount = 19;
+        break;
+      case "Void":
+        powerUpData.iconPath = './assets/queen_blesses/Plague/Smoke_scull13.png';
+        powerUpData.animationPath = './assets/queen_blesses/Plague/';
+        powerUpData.frameCount = 20;
+        break;
+    }
+  
+    return powerUpData;
+  }
+
+  async showQueenBlessingDialog(princess, knight, powerUpManager) {
     return new Promise((resolve) => {
       // Create dialog overlay
       const dialogOverlay = document.createElement('div');
@@ -272,6 +334,8 @@ export class FightManager {
       // Add click event directly to the button element
       button.addEventListener('click', () => {
         console.log('🖱️ Queen blessing dialog button clicked');
+        
+        // Just close the dialog - don't start animation here
         document.body.removeChild(dialogOverlay);
         resolve();
       });
@@ -465,6 +529,7 @@ export class FightManager {
         console.log('🖱️ Boss defeat dialog button clicked');
         document.body.removeChild(dialogOverlay);
         resolve();
+        this.completeFight();
       });
 
       // Create the dialog content
@@ -486,6 +551,77 @@ export class FightManager {
       document.body.appendChild(dialogOverlay);
       console.log('✅ Boss defeat dialog added to DOM successfully');
     });
+  }
+
+  async showBossWorthOponentDialog(boss) {
+    // Create boss defeat dialog
+    const dialog = document.createElement('div');
+    dialog.className = 'boss-defeat-dialog';
+    
+    // Get boss icon (same as enemy tracker)
+    const bossIconSrc = document.getElementById('enemyIcon').src;
+    
+    dialog.innerHTML = `
+      <div class="dialog-content">
+        <img src="${bossIconSrc}" alt="Boss" style="width: 64px; height: 64px; image-rendering: pixelated;">
+        <div class="dialog-text">
+          <strong>Boss:</strong> Finally a worthy opponent...
+        </div>
+        <button id="bossDefeatNextBtn" class="dialog-button">Next</button>
+      </div>
+    `;
+    
+    // Add styling
+    dialog.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      border: 2px solid red;
+      z-index: 1000;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+    `;
+    
+    const content = dialog.querySelector('.dialog-content');
+    content.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      align-items: center;
+    `;
+    
+    const button = dialog.querySelector('#bossDefeatNextBtn');
+    button.style.cssText = `
+      padding: 10px 20px;
+      background: red;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 16px;
+    `;
+    
+    button.addEventListener('click', () => {
+      document.body.removeChild(dialog);
+      
+      // Mark boss as dead and play death animation
+      boss.isDead = true;
+    
+      
+      // Play boss death animation and wait for it to complete
+      this.playBossDeathSequence(boss).then(async () => {
+        await this.showBossDefeatDialog();
+      });
+    });
+    
+    document.body.appendChild(dialog);
   }
 
   async playBossDeathSequence(boss) {
