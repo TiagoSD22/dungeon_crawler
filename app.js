@@ -1158,83 +1158,11 @@ function startFinalRoomSequence() {
         // Stop at idle position
         if (knight.characterController) {
           knight.characterController.goIdle('Right');
-          grantRandomBlessing()
+          startBossFight();
         }
       }
     );
   }, 500);
-}
-
-// Queen blessing system
-function startQueenBlessing() {
-  console.log('👑 Starting queen blessing sequence...');
-  
-  // Start queen blessing animation
-  if (princess && princess.princessController) {
-    princess.princessController.startBlessingAnimation();
-  }
-}
-
-
-
-function grantRandomBlessing() {
-  const blessings = ["Phoenix", "Kraken", "Void"];
-  const chosenBlessing = blessings[Math.floor(Math.random() * blessings.length)];
-  
-  console.log(`👑 Queen grants ${chosenBlessing} blessing!`);
-  
-  // Reset queen to idle animation
-  if (princess && princess.princessController) {
-    princess.princessController.goIdle();
-  }
-
-  startQueenBlessing()
-  
-  // Set the special power-up based on blessing
-  const specialPowerUp = createSpecialPowerUp(chosenBlessing);
-  
-  // Update knight's current power-up
-  if (knight.characterController) {
-    knight.characterController.setCurrentPowerUp(specialPowerUp);
-  }
-  
-  // Update power-up tracker display
-  powerUpManager.setCurrentPowerUp(specialPowerUp);
-  
-  // Start boss fight sequence
-  setTimeout(() => {
-    startBossFight();
-  }, 1000);
-}
-
-function createSpecialPowerUp(blessingType) {
-  const powerUpData = {
-    type: blessingType.toLowerCase(),
-    name: `Queen's ${blessingType} Blessing`,
-    damage: 50, // Special high damage for queen's blessing
-    isQueenBlessing: true
-  };
-  
-  // Set icon based on blessing type
-  switch (blessingType) {
-    case "Phoenix":
-      powerUpData.iconPath = './assets/queen_blesses/Phoenix/phoenix_10.png';
-      powerUpData.animationPath = './assets/queen_blesses/Phoenix/';
-      powerUpData.frameCount = 16;
-      break;
-    case "Kraken":
-      powerUpData.iconPath = './assets/queen_blesses/Kraken/9.png';
-      powerUpData.animationPath = './assets/queen_blesses/Kraken/';
-      powerUpData.frameCount = 19;
-      break;
-    case "Void":
-      powerUpData.iconPath = './assets/queen_blesses/Plague/Smoke_scull13.png';
-      powerUpData.animationPath = './assets/queen_blesses/Plague/';
-      powerUpData.frameCount = 20;
-      break;
-  }
-  
-  return powerUpData;
 }
 
 function startBossFight() {
@@ -1264,131 +1192,24 @@ function startBossFight() {
     fightManager.startBossFight(
       knight.characterController,
       boss,
+      princess.princessController,
+      powerUpManager,
       'Right',
-      5, // 5 rounds
+      1, // 5 rounds
       () => {
         // Boss fight completed callback
-        showBossDefeatDialog(boss);
+        //showBossDefeatDialog(boss);
+        moveKnightToPrincess();
       },
       () => {
         // First boss attack completed callback - trigger HP notification ONCE
-        updateKnightHP(bossDamage, bossDamage); // Use actual boss damage value
+        //updateKnightHP(bossDamage, bossDamage); // Use actual boss damage value
       }
     );
   } else {
     console.warn('⚠️ Boss not found, skipping boss fight');
     completeFinalSequence();
   }
-}
-
-function showBossDefeatDialog(boss) {
-  // Create boss defeat dialog
-  const dialog = document.createElement('div');
-  dialog.className = 'boss-defeat-dialog';
-  
-  // Get boss icon (same as enemy tracker)
-  const bossIconSrc = document.getElementById('enemyIcon').src;
-  
-  dialog.innerHTML = `
-    <div class="dialog-content">
-      <img src="${bossIconSrc}" alt="Boss" style="width: 64px; height: 64px; image-rendering: pixelated;">
-      <div class="dialog-text">
-        <strong>Boss:</strong> Finally a worthy opponent...
-      </div>
-      <button id="bossDefeatNextBtn" class="dialog-button">Next</button>
-    </div>
-  `;
-  
-  // Add styling
-  dialog.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 20px;
-    border-radius: 10px;
-    border: 2px solid red;
-    z-index: 1000;
-    font-family: Arial, sans-serif;
-    text-align: center;
-    box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
-  `;
-  
-  const content = dialog.querySelector('.dialog-content');
-  content.style.cssText = `
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    align-items: center;
-  `;
-  
-  const button = dialog.querySelector('#bossDefeatNextBtn');
-  button.style.cssText = `
-    padding: 10px 20px;
-    background: red;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 16px;
-  `;
-  
-  button.addEventListener('click', () => {
-    document.body.removeChild(dialog);
-    
-    // Mark boss as dead and play death animation
-    boss.isDead = true;
-    
-    // Hide enemy from tracker
-    hideCurrentEnemy();
-    
-    // Play boss death animation and wait for it to complete
-    if (boss.playDeathAnimation) {
-      console.log('💀 Playing boss death animation...');
-      
-      // Play death animation and wait for completion
-      boss.playDeathAnimation().then(() => {
-        console.log('💀 Boss death animation completed - removing from scene');
-        
-        // Remove boss from scene after death animation completes
-        if (boss.removeFromScene) {
-          boss.removeFromScene();
-        }
-        
-        // Move knight closer to princess after boss is removed
-        setTimeout(() => {
-          moveKnightToPrincess();
-        }, 500);
-      }).catch((error) => {
-        console.error('❌ Error during boss death animation:', error);
-        
-        // Fallback: still remove boss and continue
-        if (boss.removeFromScene) {
-          boss.removeFromScene();
-        }
-        
-        setTimeout(() => {
-          moveKnightToPrincess();
-        }, 500);
-      });
-    } else {
-      // No death animation available, just remove and continue
-      console.log('⚠️ No death animation available for boss, removing immediately');
-      
-      if (boss.removeFromScene) {
-        boss.removeFromScene();
-      }
-      
-      setTimeout(() => {
-        moveKnightToPrincess();
-      }, 500);
-    }
-  });
-  
-  document.body.appendChild(dialog);
 }
 
 function moveKnightToPrincess() {
@@ -1411,12 +1232,8 @@ function moveKnightToPrincess() {
       // Knight reached princess, go idle
       if (knight.characterController) {
         knight.characterController.goIdle('Right');
+        showQueenThanksDialog(); // Show thanks dialog
       }
-      
-      // Show queen's thanks dialog
-      setTimeout(() => {
-        showQueenThanksDialog();
-      }, 500);
     }
   );
 }
@@ -1525,6 +1342,12 @@ function completeFinalSequence() {
     knight.position.z = 15;
   }, 2000);
 }
+
+//TODO 
+// fix the order of boss death, first it pops up the "Woth enemy" dialog, 
+// then when closed play boss death animation, when completed remove boss asset from canvas 
+// and show victory dialog
+
 
 function animate() {
   requestAnimationFrame(animate);
