@@ -105,11 +105,11 @@ class BossEnemy {
     
     // Animation configurations
     this.animationConfigs = {
-      anger: { frames: 5, speed: 0.12 },
-      attack: { frames: 7, speed: 0.6 },
-      death: { frames: 4, speed: 0.2 }, // Slower death animation
-      hurt: { frames: 2, speed: 0.15 },
-      idle: { frames: 3, speed: 0.9 },  // Slower idle animation
+      anger: { frames: 5, speed: 0.5 },
+      attack: { frames: 7, speed: 0.4 },
+      death: { frames: 4, speed: 0.5 }, // Slower death animation
+      hurt: { frames: 2, speed: 0.3 },
+      idle: { frames: 3, speed: 0.7 },  // Slower idle animation
       run: { frames: 6, speed: 0.1 },
       walk: { frames: 6, speed: 0.15 }
     };
