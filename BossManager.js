@@ -116,9 +116,9 @@ class BossEnemy {
     
     // Special attack animations
     this.specialAttackConfigs = {
-      fire: { frames: 5, speed: 0.4 },
-      blade: { frames: 5, speed: 0.4 },
-      lightning: { frames: 5, speed: 0.4 }
+      fire: { frames: 10, speed: 0.4 },
+      blade: { frames: 7, speed: 0.4 },
+      lightning: { frames: 9, speed: 0.4 }
     };
     
     this.loaded = false;
