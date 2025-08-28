@@ -4,6 +4,7 @@ import { DirectionalSpriteKnight } from './DirectionalSpriteKnight.js';
 import { PowerUpManager } from './PowerUpManager.js';
 import { SpellEffectManager } from './SpellEffectManager.js';
 import { EnemyManager } from './EnemyManager.js';
+import { BossManager } from './BossManager.js';
 import { FightManager } from './FightManager.js';
 import { EnvironmentManager } from './EnvironmentManager.js';
 import { AnimatedPrincess } from './AnimatedPrincess.js';
@@ -27,6 +28,7 @@ let knight, princess;
 let powerUpManager;
 let spellEffectManager;
 let enemyManager;
+let bossManager;
 let fightManager;
 let environmentManager;
 let isAnimating = false;
@@ -117,6 +119,10 @@ async function init() {
   // Initialize enemy manager
   enemyManager = new EnemyManager();
   await enemyManager.initialize(scene);
+  
+  // Initialize boss manager
+  bossManager = new BossManager();
+  await bossManager.initialize(scene, cellSize);
   
   // Store grid dimensions for enemy positioning (use expanded dimensions with walls)
   scene.userData.gridWidth = dungeonData.input[0].length + (2 * WALL_PADDING);
@@ -222,12 +228,12 @@ async function createEnemies(grid) {
       if (roomValue < 0) {
         // Check if this is the final room with a threat
         if (i === finalI && j === finalJ && finalRoomValue < 0) {
-          // Special positioning for final room enemy (moved one cell left from previous position)
+          // Special positioning for final room boss (moved one cell left from previous position)
           const expandedFinalI = finalI + WATER_ROWS_OFFSET + WALL_PADDING;
           const expandedFinalJ = finalJ + WALL_PADDING + 4; // Position 4 rooms from the left (one cell left of previous position)
           
-          console.log(`🏰 Creating final room enemy at special position [${expandedFinalI}, ${expandedFinalJ}]`);
-          await enemyManager.createEnemyForRoom(expandedFinalI, expandedFinalJ, roomValue, cellSize, scene, grid[0].length + (2 * WALL_PADDING), expandedGridHeight);
+          console.log(`👹 Creating final room BOSS at special position [${expandedFinalI}, ${expandedFinalJ}]`);
+          await bossManager.createBossForRoom(expandedFinalI, expandedFinalJ, roomValue, cellSize, scene, grid[0].length + (2 * WALL_PADDING), expandedGridHeight, 1); // Boss ID 1
         } else {
           // Use standard positioning for regular threat rooms
           const expandedPos = getExpandedPosition(i, j, grid[0].length, expandedGridHeight);
@@ -654,7 +660,13 @@ function useEnemyIconFallback(enemy) {
   // Fallback: use the asset path directly
   const enemyType = getEnemyTypeFromInstance(enemy);
   const enemySubType = getEnemySubTypeFromInstance(enemy);
-  const iconPath = `./assets/enemies/${enemyType}/${enemySubType}/idle/full.png`;
+  
+  let iconPath;
+  if (enemyType === 'boss') {
+    iconPath = `./assets/boss/${enemySubType}/Idle1.png`;
+  } else {
+    iconPath = `./assets/enemies/${enemyType}/${enemySubType}/idle/full.png`;
+  }
   
   const enemyIcon = document.getElementById('enemyIcon');
   enemyIcon.src = iconPath;
@@ -673,6 +685,7 @@ function hideCurrentEnemy() {
 
 function getEnemyTypeFromInstance(enemy) {
   // Determine enemy type from the enemy instance
+  if (enemy.constructor.name.includes('Boss')) return 'boss';
   if (enemy.constructor.name.includes('Ghost')) return 'ghost';
   if (enemy.constructor.name.includes('Beholder')) return 'beholder';
   if (enemy.constructor.name.includes('Demon')) return 'demon';
@@ -682,6 +695,7 @@ function getEnemyTypeFromInstance(enemy) {
 
 function getEnemySubTypeFromInstance(enemy) {
   // Get the sub-type number from the enemy instance
+  if (enemy.bossId) return enemy.bossId;
   if (enemy.ghostType) return enemy.ghostType;
   if (enemy.beholderType) return enemy.beholderType;
   if (enemy.demonType) return enemy.demonType;
@@ -736,6 +750,12 @@ function startAnimation() {
   enemyManager.dispose();
   enemyManager = new EnemyManager();
   enemyManager.initialize(scene, cellSize);
+  
+  // Reset bosses (recreate them)
+  bossManager.removeFromScene(scene);
+  bossManager.dispose();
+  bossManager = new BossManager();
+  bossManager.initialize(scene, cellSize);
   
   // Reset fight manager
   if (fightManager) {
@@ -1138,160 +1158,17 @@ function startFinalRoomSequence() {
         // Stop at idle position
         if (knight.characterController) {
           knight.characterController.goIdle('Right');
-        }
-        
-        // Branch based on room type
-        if (isThreatRoom) {
-          // Threat room: Start queen blessing sequence (leads to boss fight)
-          setTimeout(() => {
-            startQueenBlessing();
-          }, 500);
-        } else {
-          // Non-threat room: Go directly to princess (treasure room)
-          setTimeout(() => {
-            moveKnightToPrincess();
-          }, 500);
+          startBossFight();
         }
       }
     );
   }, 500);
 }
 
-// Queen blessing system
-function startQueenBlessing() {
-  console.log('👑 Starting queen blessing sequence...');
-  
-  // Start queen blessing animation
-  if (princess && princess.princessController) {
-    princess.princessController.startBlessingAnimation();
-  }
-  
-  // Show blessing dialog after animation completes
-  setTimeout(() => {
-    showBlessingDialog();
-  }, 2000); // Adjust timing based on animation length
-}
-
-function showBlessingDialog() {
-  // Create blessing dialog
-  const dialog = document.createElement('div');
-  dialog.className = 'blessing-dialog';
-  dialog.innerHTML = `
-    <div class="dialog-content">
-      <div class="dialog-text">
-        <strong>Queen:</strong> I give you my bless my brave knight!
-      </div>
-      <button id="blessingNextBtn" class="dialog-button">Next</button>
-    </div>
-  `;
-  
-  // Add styling
-  dialog.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 20px;
-    border-radius: 10px;
-    border: 2px solid gold;
-    z-index: 1000;
-    font-family: Arial, sans-serif;
-    text-align: center;
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-  `;
-  
-  const content = dialog.querySelector('.dialog-content');
-  content.style.cssText = `
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    align-items: center;
-  `;
-  
-  const button = dialog.querySelector('#blessingNextBtn');
-  button.style.cssText = `
-    padding: 10px 20px;
-    background: gold;
-    color: black;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 16px;
-  `;
-  
-  button.addEventListener('click', () => {
-    document.body.removeChild(dialog);
-    grantRandomBlessing();
-  });
-  
-  document.body.appendChild(dialog);
-}
-
-function grantRandomBlessing() {
-  const blessings = ["Phoenix", "Kraken", "Void"];
-  const chosenBlessing = blessings[Math.floor(Math.random() * blessings.length)];
-  
-  console.log(`👑 Queen grants ${chosenBlessing} blessing!`);
-  
-  // Reset queen to idle animation
-  if (princess && princess.princessController) {
-    princess.princessController.goIdle();
-  }
-  
-  // Set the special power-up based on blessing
-  const specialPowerUp = createSpecialPowerUp(chosenBlessing);
-  
-  // Update knight's current power-up
-  if (knight.characterController) {
-    knight.characterController.setCurrentPowerUp(specialPowerUp);
-  }
-  
-  // Update power-up tracker display
-  powerUpManager.setCurrentPowerUp(specialPowerUp);
-  
-  // Start boss fight sequence
-  setTimeout(() => {
-    startBossFight();
-  }, 1000);
-}
-
-function createSpecialPowerUp(blessingType) {
-  const powerUpData = {
-    type: blessingType.toLowerCase(),
-    name: `Queen's ${blessingType} Blessing`,
-    damage: 50, // Special high damage for queen's blessing
-    isQueenBlessing: true
-  };
-  
-  // Set icon based on blessing type
-  switch (blessingType) {
-    case "Phoenix":
-      powerUpData.iconPath = './assets/queen_blesses/Phoenix/phoenix_10.png';
-      powerUpData.animationPath = './assets/queen_blesses/Phoenix/';
-      powerUpData.frameCount = 16;
-      break;
-    case "Kraken":
-      powerUpData.iconPath = './assets/queen_blesses/Kraken/9.png';
-      powerUpData.animationPath = './assets/queen_blesses/Kraken/';
-      powerUpData.frameCount = 19;
-      break;
-    case "Void":
-      powerUpData.iconPath = './assets/queen_blesses/Plague/Smoke_scull13.png';
-      powerUpData.animationPath = './assets/queen_blesses/Plague/';
-      powerUpData.frameCount = 20;
-      break;
-  }
-  
-  return powerUpData;
-}
-
 function startBossFight() {
   console.log('⚔️ Starting boss fight sequence...');
   
-  // Find the final enemy (boss)
+  // Find the final boss
   const path = dungeonData.path;
   const [finalI, finalJ] = path[path.length - 1];
   
@@ -1303,143 +1180,36 @@ function startBossFight() {
   const expandedFinalI = finalI + WATER_ROWS_OFFSET + WALL_PADDING;
   const expandedFinalJ = finalJ + WALL_PADDING + 4; // Same position as created in createEnemies
   
-  const boss = enemyManager.getEnemyAt(expandedFinalI, expandedFinalJ);
+  const boss = bossManager.getBossAt(expandedFinalI, expandedFinalJ);
   
   if (boss && !boss.isDead) {
     console.log(`👹 Boss found, starting 5-round fight! Boss damage: ${absBossDamage}`);
     
-    // Show enemy in tracker with actual boss damage
+    // Show boss in tracker with actual boss damage
     showCurrentEnemy(boss, bossDamage); // Use original negative value for display
     
     // Start special boss fight (5 rounds)
     fightManager.startBossFight(
       knight.characterController,
       boss,
+      princess.princessController,
+      powerUpManager,
       'Right',
-      5, // 5 rounds
+      1, // 5 rounds
       () => {
         // Boss fight completed callback
-        showBossDefeatDialog(boss);
+        //showBossDefeatDialog(boss);
+        moveKnightToPrincess();
       },
       () => {
         // First boss attack completed callback - trigger HP notification ONCE
-        updateKnightHP(bossDamage, bossDamage); // Use actual boss damage value
+        //updateKnightHP(bossDamage, bossDamage); // Use actual boss damage value
       }
     );
   } else {
     console.warn('⚠️ Boss not found, skipping boss fight');
     completeFinalSequence();
   }
-}
-
-function showBossDefeatDialog(boss) {
-  // Create boss defeat dialog
-  const dialog = document.createElement('div');
-  dialog.className = 'boss-defeat-dialog';
-  
-  // Get boss icon (same as enemy tracker)
-  const bossIconSrc = document.getElementById('enemyIcon').src;
-  
-  dialog.innerHTML = `
-    <div class="dialog-content">
-      <img src="${bossIconSrc}" alt="Boss" style="width: 64px; height: 64px; image-rendering: pixelated;">
-      <div class="dialog-text">
-        <strong>Boss:</strong> Finally a worthy opponent...
-      </div>
-      <button id="bossDefeatNextBtn" class="dialog-button">Next</button>
-    </div>
-  `;
-  
-  // Add styling
-  dialog.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 20px;
-    border-radius: 10px;
-    border: 2px solid red;
-    z-index: 1000;
-    font-family: Arial, sans-serif;
-    text-align: center;
-    box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
-  `;
-  
-  const content = dialog.querySelector('.dialog-content');
-  content.style.cssText = `
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    align-items: center;
-  `;
-  
-  const button = dialog.querySelector('#bossDefeatNextBtn');
-  button.style.cssText = `
-    padding: 10px 20px;
-    background: red;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 16px;
-  `;
-  
-  button.addEventListener('click', () => {
-    document.body.removeChild(dialog);
-    
-    // Mark boss as dead and play death animation
-    boss.isDead = true;
-    
-    // Hide enemy from tracker
-    hideCurrentEnemy();
-    
-    // Play boss death animation and wait for it to complete
-    if (boss.playDeathAnimation) {
-      console.log('💀 Playing boss death animation...');
-      
-      // Play death animation and wait for completion
-      boss.playDeathAnimation().then(() => {
-        console.log('💀 Boss death animation completed - removing from scene');
-        
-        // Remove boss from scene after death animation completes
-        if (boss.removeFromScene) {
-          boss.removeFromScene();
-        }
-        
-        // Move knight closer to princess after boss is removed
-        setTimeout(() => {
-          moveKnightToPrincess();
-        }, 500);
-      }).catch((error) => {
-        console.error('❌ Error during boss death animation:', error);
-        
-        // Fallback: still remove boss and continue
-        if (boss.removeFromScene) {
-          boss.removeFromScene();
-        }
-        
-        setTimeout(() => {
-          moveKnightToPrincess();
-        }, 500);
-      });
-    } else {
-      // No death animation available, just remove and continue
-      console.log('⚠️ No death animation available for boss, removing immediately');
-      
-      if (boss.removeFromScene) {
-        boss.removeFromScene();
-      }
-      
-      setTimeout(() => {
-        moveKnightToPrincess();
-      }, 500);
-    }
-  });
-  
-  document.body.appendChild(dialog);
 }
 
 function moveKnightToPrincess() {
@@ -1462,12 +1232,8 @@ function moveKnightToPrincess() {
       // Knight reached princess, go idle
       if (knight.characterController) {
         knight.characterController.goIdle('Right');
+        showQueenThanksDialog(); // Show thanks dialog
       }
-      
-      // Show queen's thanks dialog
-      setTimeout(() => {
-        showQueenThanksDialog();
-      }, 500);
     }
   );
 }
@@ -1577,6 +1343,12 @@ function completeFinalSequence() {
   }, 2000);
 }
 
+//TODO 
+// fix the order of boss death, first it pops up the "Woth enemy" dialog, 
+// then when closed play boss death animation, when completed remove boss asset from canvas 
+// and show victory dialog
+
+
 function animate() {
   requestAnimationFrame(animate);
   
@@ -1604,6 +1376,11 @@ function animate() {
   // Update enemies
   if (enemyManager) {
     enemyManager.updateAllEnemies(0.016);
+  }
+  
+  // Update bosses
+  if (bossManager) {
+    bossManager.updateAllBosses(0.016);
   }
   
   // Update princess animation

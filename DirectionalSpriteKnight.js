@@ -540,4 +540,49 @@ export class DirectionalSpriteKnight {
       };
     });
   }
+
+  // Play queen blessing animation (called before boss fight)
+  async playQueenBlessingAnimation() {
+    console.log(`👑 Knight receives queen's blessing!`);
+    
+    return new Promise((resolve) => {
+      // Play a short idle animation while receiving blessing
+      this.playAnimation('idle');
+      
+      let blessingEffectComplete = false;
+      let knightAnimationComplete = false;
+      
+      const checkCompletion = () => {
+        if (blessingEffectComplete && knightAnimationComplete) {
+          resolve();
+        }
+      };
+      
+      // Cast queen blessing effect
+      if (this.currentPowerUp && this.currentPowerUp.isQueenBlessing && this.spellEffectManager) {
+        console.log(`👑 Knight receiving ${this.currentPowerUp.name} blessing!`);
+        
+        // Start blessing effect immediately
+        this.spellEffectManager.playQueenBlessingEffect(
+          this.currentPowerUp,
+          this.sprite.position,
+          this.currentDirection,
+          () => {
+            console.log(`✨ ${this.currentPowerUp.name} blessing received!`);
+            blessingEffectComplete = true;
+            checkCompletion();
+          }
+        );
+      } else {
+        // No special blessing, complete immediately
+        blessingEffectComplete = true;
+      }
+      
+      // Set a timer for knight animation (short blessing receive animation)
+      setTimeout(() => {
+        knightAnimationComplete = true;
+        checkCompletion();
+      }, 1500); // 1.5 seconds
+    });
+  }
 }
